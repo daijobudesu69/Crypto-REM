@@ -1,0 +1,94 @@
+name: RMF bot
+
+# Pola watcher dari Crypto-MEX: cron GitHub tidak andal (terukur ~25% jadwal yang
+# benar-benar jalan, jeda terburuk hampir 5 jam). Jadi cron TIDAK bertugas
+# mengecek; tugasnya hanya MENYALAKAN watcher yang hidup ~5,5 jam dan mengecek
+# sendiri tiap 10 menit. Dengan concurrency group, jadwal yang jatuh saat
+# watcher masih hidup ANTRE lalu langsung mulai begitu yang lama selesai.
+#
+# Satu siklus (run_cycle.py) idempoten: momentum hanya jalan sekali per hari UTC
+# (setelah 00:02 UTC = 07:02 WIB), flush sekali per candle 4h.
+#
+# Repo publik: menit Actions tidak dibatasi. Repo privat: watcher nonstop butuh
+# ~4.500 menit/bulan, melebihi kuota gratis 2.000 (lihat docs/SETUP.md).
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "once = satu siklus lalu selesai; loop = pantau ~5,5 jam"
+        type: choice
+        options: [once, loop]
+        default: once
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rmf-state
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # rebase di save_state.sh butuh riwayat penuh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Watcher
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GSHEET_WEBHOOK_URL: ${{ secrets.GSHEET_WEBHOOK_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GSHEET_SPREADSHEET_ID: ${{ secrets.GSHEET_SPREADSHEET_ID }}
+          RMF_QUIET_IDLE: "1"
+          MODE: ${{ inputs.mode || 'loop' }}
+          # Nama secret harus sama dengan execution.agent_secret di config.yaml
+          # (dicek tests/test_repo.py). Kosong = live tidak bisa jalan, paper tetap.
+          AGENT_KEY_IN: ${{ secrets.HYPE_RMF_AGENT_KEY }}
+        run: |
+          set -uo pipefail
+          # Kunci API wallet hanya untuk run_cycle.py: dipindah ke variabel shell
+          # (tidak di-export) supaya git dan script lain tidak bisa membacanya.
+          agent_key="${AGENT_KEY_IN:-}"
+          unset AGENT_KEY_IN
+          INTERVAL=600
+          DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))
+          worst=0
+          n=0
+          echo "[watch] mode=${MODE} interval=${INTERVAL}s"
+          while :; do
+            n=$((n + 1))
+            echo "::group::siklus #${n} — $(date -u '+%Y-%m-%d %H:%M:%SZ')"
+            bash tools/refresh_state.sh || true
+            # Semua perintah di loop ini harus `|| rc=$?` atau `|| ...`: GitHub
+            # menjalankan step dengan bash -e, dan exit non-nol tanpa itu
+            # mengakhiri job SEBELUM state disimpan (insiden MEX 30 Sep 2026).
+            rc=0
+            RMF_AGENT_KEY="$agent_key" timeout -k 30 1500 python run_cycle.py || rc=$?
+            if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
+            if ! bash tools/save_state.sh "state: $(date -u +%Y-%m-%dT%H:%MZ)"; then
+              echo "[watch] save_state gagal"
+              worst=1
+            fi
+            echo "::endgroup::"
+            if [ "${MODE}" = "once" ]; then break; fi
+            if [ $(( $(date +%s) + INTERVAL )) -ge "$DEADLINE" ]; then
+              echo "[watch] anggaran waktu habis; cron berikutnya menyalakan ulang"
+              break
+            fi
+            sleep "$INTERVAL"
+          done
+          echo "[watch] selesai setelah ${n} siklus (exit ${worst})"
+          exit "$worst"

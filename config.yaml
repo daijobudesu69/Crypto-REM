@@ -1,0 +1,113 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  RMF (Rotasi Momentum + Flush Basket) — forward test di HYPE
+#
+#  Parameter strategi di bawah SAMA dengan versi final riset (HANDOVER_RMF.md §1).
+#  Mengubahnya membuat forward test tidak lagi sebanding dengan simulasi. Kalau
+#  diubah, catat tanggal dan alasannya di CHANGELOG.md.
+#
+#  Mode (paper/live/manage/flatten/off) TIDAK diatur di sini, tapi di
+#  control/bot.yaml (dibaca setiap siklus, diubah lewat workflow control.yml).
+# ─────────────────────────────────────────────────────────────────────────────
+
+capital_usdc: 200            # modal awal buku paper dan dasar statistik
+# Hari pertama forward test (UTC). Sebelum ini bot hanya mencatat run, tanpa
+# trading, supaya entry pertama tepat di open harian 00:00 UTC (07:00 WIB).
+forward_start: "2026-10-05"
+
+universe:
+  # static  = daftar riset config/hype_universe.txt (top 150 HYPE per Sep 2026,
+  #           sama persis dengan simulasi 200 -> 314). Koin delist dibuang otomatis.
+  # rolling = dihitung ulang tiap hari: top_n volume notional volume_days hari,
+  #           tanpa stablecoin/emas (exclude). Tidak dipakai di riset.
+  mode: static
+  static_file: config/hype_universe.txt
+  top_n: 150
+  volume_days: 30
+  exclude: [USDC, USDT, USDE, USDH, FDUSD, DAI, PYUSD, USD1, PAXG, XAUT]
+  fetch_days: 100             # riwayat candle 1d per koin (>= min_history_days)
+  btc_fetch_days: 1200        # EMA50 BTC dihitung dari riwayat panjang, seperti riset
+
+momentum:
+  n_hold: 10                  # isi sampai 10 posisi (peringkat 1-10)
+  exit_rank: 15               # jual kalau peringkat > 15
+  lookback_days: 14           # return 14 hari
+  min_history_days: 60        # koin butuh >= 60 candle harian
+  regime_symbol: BTC
+  regime_ema: 50              # filter ON kalau close BTC > EMA50
+  gross_exposure: 0.5         # ekuitas x 0,5 / 10 per koin
+  min_order_usdc: 10          # minimum order HYPE
+  # Siklus harian dijalankan setelah candle 1d close (00:00 UTC = 07:00 WIB).
+  # Jeda kecil supaya candle terakhir sudah final di API.
+  run_after_minutes: 2
+
+flush:
+  # binance_spot    = data-api.binance.vision (terjangkau dari rumah dan GitHub)
+  # binance_futures = fapi.binance.com (sinyal terbaik, tapi diblokir dari rumah
+  #                   user dan dari runner GitHub di AS; butuh VPS)
+  signal_source: binance_spot
+  spot_universe_file: config/flush_spot_universe.txt
+  futures_universe_file: config/flush_futures_universe.txt
+  bb_len: 20
+  bb_k: 2.0
+  vol_len: 20
+  vol_mult: 1.5
+  min_coins: 10               # event kalau >= 10 koin memberi sinyal di candle yang sama
+  max_coins: 15               # maks 15 koin per event, dipilih acak (seed = waktu bar)
+  atr_len: 14
+  sl_atr: 2.0
+  tp_atr: 2.0
+  max_bars: 48                # keluar paksa setelah 48 candle 4h (8 hari)
+  atr_history_bars: 200       # candle 4h HYPE untuk ATR
+  risk_pct: 0.5               # risiko per koin, % ekuitas
+  max_event_risk_pct: 8.0
+  reject_forced_risk_x: 2.0   # tolak koin kalau minimum order memaksa risiko > 2x target
+  gross_cap_x: 2.0            # notional momentum + flush <= 2x ekuitas
+
+costs:
+  # Backtest memakai 0,07% per sisi (fee + slippage). Buku paper memakai fee
+  # taker HYPE base tier + slippage, totalnya sama.
+  taker_fee: 0.00045
+  paper_slippage: 0.00025
+
+benchmark:
+  # Basket "beli semua koin" = definisi riset (research/xsec_hl.py): bobot sama
+  # semua koin universe yang eligible (>= 60 candle), return open -> open
+  # berikutnya dikurangi funding riil, eksposur 1x, tanpa filter BTC.
+  # Dibandingkan dengan sleeve momentum di 1x (return akun / eksposur aktual).
+  include_funding: true
+
+stop_rules:
+  # Disepakati sebelum mulai (HANDOVER_RMF.md §1). Bot hanya MENANDAI dan
+  # mengirim alarm; keputusan berhenti tetap di tangan user. Khusus DD, mode live
+  # otomatis berhenti membuka posisi baru (posisi lama tetap dijual sesuai aturan).
+  max_drawdown_pct: 40
+  underperform_months: 9      # 9 bulan berturut-turut kalah dari basket
+  review_after_months: 6
+  # "Hasil 6 bulan jauh di bawah ekspektasi" = di bawah persentil 5 return 6
+  # bulan simulasi HYPE momentum 200 USDC (Jul 2024 -> Okt 2026, simulasi yang
+  # sama dengan 200 -> 314): 639 jendela, terburuk -19,2%, p5 -12,5%, p10 -10,9%,
+  # median +3,8%, 42,6% jendela negatif.
+  six_month_floor_pct: -12.5
+  expected_cagr_pct: 22
+
+hype:
+  info_url: https://api.hyperliquid.xyz/info
+  weight_per_minute: 1000     # batas resmi 1200/menit per IP; disisakan ruang
+
+execution:
+  # Hanya dipakai di mode live (control/bot.yaml: momentum: live).
+  # Alamat PUBLIK aman di repo. Kunci privat API wallet disimpan sebagai GitHub
+  # secret dengan nama di agent_secret (nama saja, bukan isinya).
+  #   master_address  = akun utama yang mendaftarkan API wallet
+  #   account_address = SUBACCOUNT khusus RMF (bukan subaccount MEX)
+  #   agent_address   = alamat API wallet; bot menolak jalan kalau kunci di
+  #                     secret tidak menghasilkan alamat ini
+  master_address: ""
+  account_address: ""
+  agent_address: ""
+  agent_secret: HYPE_RMF_AGENT_KEY
+  agent_valid_until: ""       # YYYY-MM-DD, API wallet HYPE maks 180 hari
+  margin_mode: cross          # JANGAN isolated 3-5x (crash 10 Okt 2025: median alt -65% intrabar)
+  leverage: 1                 # eksposur diatur ukuran order (0,5x), bukan leverage
+  ioc_slippage: 0.01          # order market = IOC limit 1% menembus mid
+  max_live_attempts_per_day: 6

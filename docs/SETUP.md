@@ -1,0 +1,174 @@
+# Setup bot RMF
+
+Urutan yang disarankan. Langkah 1–2 cukup untuk mulai paper. Telegram, Sheets, dan
+HYPE bisa ditambahkan kapan saja tanpa mengubah kode: bot otomatis memakainya begitu
+secret-nya ada.
+
+| Langkah | Wajib untuk | Status |
+|---|---|---|
+| 1. Repo GitHub + Actions | semua | |
+| 2. Cek paper jalan | semua | |
+| 3. Telegram | notifikasi | menyusul |
+| 4. Google Sheets | cermin log | menyusul, opsional |
+| 5. HYPE API wallet + subaccount | live momentum | menyusul |
+| 6. Nyalakan live | live momentum | dilakukan user sendiri |
+
+---
+
+## 1. Repo GitHub
+
+Repo: **https://github.com/daijobudesu69/Crypto-REM** (publik). Publik dipilih supaya
+menit Actions tidak dibatasi (watcher nonstop ±4.500 menit/bulan; repo privat hanya
+dapat 2.000). Konsekuensinya: isi `state/` (ekuitas, posisi, order) bisa dibaca
+siapa saja. Secret tetap aman.
+
+- Workflow meminta izin tulis sendiri (`permissions: contents: write`), jadi tidak
+  perlu mengubah setting repo.
+- Cron menyalakan `RMF bot` otomatis. Untuk mulai segera:
+
+```bash
+gh workflow run bot.yml --repo daijobudesu69/Crypto-REM -f mode=loop
+```
+
+- Forward test mulai `forward_start` di `config.yaml` (2026-10-05, 07:00 WIB).
+  Sebelum itu bot hanya mencatat run, tanpa trading.
+
+## 2. Cek paper jalan
+
+- Tab Actions → `RMF bot` → log `siklus #1`. Siklus harian butuh ±3–5 menit (candle
+  1d ±180 perp HYPE dengan jeda rate limit). Siklus tanpa pekerjaan ±1 detik.
+- `state/equity.csv` dapat satu baris per hari setelah 00:02 UTC (07:02 WIB).
+- Lokal, tanpa mengubah state apa pun:
+
+```bash
+python run_status.py --flush
+```
+
+## 3. Telegram
+
+1. Chat `@BotFather` → `/newbot` → simpan token.
+2. Kirim satu pesan ke bot, lalu buka
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` dan ambil `chat.id`.
+3. Simpan sebagai secret:
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM TELEGRAM_BOT_TOKEN
+```
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM TELEGRAM_CHAT_ID
+```
+
+Yang dikirim: ringkasan harian momentum (±07:02–07:15 WIB), event dan exit flush,
+perubahan mode, error (maks 1× per 6 jam per jenis), aturan berhenti, watchdog.
+Pesan yang gagal terkirim disimpan di `state/outbox.json` dan dicoba ulang 48 jam.
+
+## 4. Google Sheets (opsional)
+
+Pilih **satu**:
+
+**A. Apps Script (paling mudah, tanpa kunci).** Buka spreadsheet → Extensions →
+Apps Script → tempel `docs/apps_script.gs` → Deploy → New deployment → Web app,
+Execute as: *Me*, Who has access: *Anyone* → salin URL.
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM GSHEET_WEBHOOK_URL
+```
+
+**B. Service account.** Buat service account di Google Cloud, aktifkan Sheets API,
+unduh kunci JSON, bagikan spreadsheet ke `client_email` dengan akses Editor.
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM GOOGLE_SERVICE_ACCOUNT_JSON < key.json
+```
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM GSHEET_SPREADSHEET_ID
+```
+
+Tab yang ditulis: `equity`, `orders`, `flush_trades`, `flush_signals` (hanya event).
+Gagal menulis ke Sheets tidak pernah menggagalkan run.
+
+## 5. HYPE: subaccount + API wallet
+
+1. Di app HYPE buat **subaccount khusus RMF** (jangan subaccount MEX). Transfer
+   200 USDC ke sana.
+2. Buat **API wallet** (More → API) di akun utama. Simpan private key-nya. Masa
+   berlaku maks 180 hari.
+3. Isi `config.yaml` → `execution` (alamat publik, aman di repo):
+   - `master_address`: akun utama
+   - `account_address`: subaccount RMF
+   - `agent_address`: alamat API wallet
+   - `agent_valid_until`: tanggal kedaluwarsa API wallet
+4. Simpan private key sebagai secret (66 karakter: `0x` + 64 hex, **bukan** alamat):
+
+```bash
+gh secret set --repo daijobudesu69/Crypto-REM HYPE_RMF_AGENT_KEY
+```
+
+5. Cek dari PC (hanya baca, tidak ada order). PowerShell:
+
+```powershell
+$env:RMF_AGENT_KEY = "0x..."; python tools/check_live.py; Remove-Item Env:RMF_AGENT_KEY
+```
+
+   Yang dicek: kunci cocok dengan `agent_address`, agent terdaftar dan belum
+   kedaluwarsa, ekuitas subaccount terbaca (dan metodenya: perp `accountValue`
+   atau saldo USDC spot untuk akun unified), posisi yang ada.
+6. Cek koin yang overlap dengan MEX (MEX live di 13 koin). Satu koin = satu posisi
+   per akun, tapi subaccount terpisah, jadi tidak saling menimpa.
+
+## 6. Menyalakan live (user sendiri)
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=live
+```
+
+- Berlaku ≤ ~10 menit. Telegram mengonfirmasi "mode sekarang".
+- Kalau dinyalakan di tengah hari, live langsung membeli top 10 hari itu di harga
+  saat itu (memakai peringkat hari itu yang sama dengan buku paper).
+- Buku paper tetap jalan sebagai pembanding eksekusi.
+
+Rem dan pembatalan:
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=manage
+```
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=flatten
+```
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=paper
+```
+
+- `manage`: tanpa beli baru, jual tetap sesuai aturan.
+- `flatten`: tutup semua posisi subaccount tiap siklus sampai mode diganti.
+- Breaker DD > 40%: live otomatis berhenti membeli. Reset (mis. setelah deposit/withdraw):
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f reset_breaker=true
+```
+
+## Flush dengan sinyal futures (opsional, butuh VPS)
+
+Sinyal terbaik (+0,18R per event) butuh candle futures Binance. `fapi.binance.com`
+diblokir dari rumah user dan dari runner GitHub (IP AS, HTTP 451). Di VPS yang lolos:
+
+```bash
+curl -s -w " %{http_code}\n" https://fapi.binance.com/fapi/v1/time
+```
+
+Kalau 200: jalankan `run_cycle.py` di VPS tiap 10 menit (cron) dengan
+`flush.signal_source: binance_futures`. Jangan jalankan watcher GitHub dan VPS
+bersamaan di state yang sama.
+
+## Jalan di PC (alternatif tanpa GitHub)
+
+```bash
+pip install -r requirements.txt
+```
+
+Task Scheduler Windows: jalankan `python run_cycle.py` tiap 10 menit di folder repo.
+State ditulis ke `state/`. Dengan GitHub aktif, jangan jalankan ini bersamaan.

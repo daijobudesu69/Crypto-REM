@@ -1,0 +1,388 @@
+<meta charset="utf-8">
+<title>RMF Strategy Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column (max 760px) with a sticky section bar; tables scroll inside their own box. Trading-desk ledger feel: ink + one blue accent, red for losses. */
+:root{
+  --bg:#f6f7f5; --surface:#ffffff; --fg:#121614; --fg2:#4b524e; --muted:#7c8480; --line:#dfe3df;
+  --accent:#2a63c7; --pos:#2a78d6; --neg:#e34948; --onchip:#ffffff; --warn-bg:#fff4e0; --warn-fg:#7a4b00;
+  --font-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111413; --surface:#191d1b; --fg:#eef1ef; --fg2:#b9c0bc; --muted:#8a928e; --line:#2b312e;
+  --accent:#6f9cf0; --pos:#3987e5; --neg:#e66767; --onchip:#0d1110; --warn-bg:#3a2c12; --warn-fg:#f3cf8a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111413; --surface:#191d1b; --fg:#eef1ef; --fg2:#b9c0bc; --muted:#8a928e; --line:#2b312e;
+  --accent:#6f9cf0; --pos:#3987e5; --neg:#e66767; --onchip:#0d1110; --warn-bg:#3a2c12; --warn-fg:#f3cf8a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.55;margin:0}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1{font-size:1.75rem;line-height:1.15;margin:.2em 0 .3em;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:1.3rem;margin:2.2em 0 .5em;font-weight:800;text-wrap:balance;scroll-margin-top:64px}
+h3{font-size:1.02rem;margin:1.6em 0 .4em;font-weight:700}
+p,li{color:var(--fg)} .sub{color:var(--fg2)} small,.note{color:var(--muted);font-size:.85rem}
+.eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+nav.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-16px;padding:8px 16px;overflow-x:auto;white-space:nowrap}
+nav.bar a{display:inline-block;color:var(--fg2);text-decoration:none;font-size:.82rem;font-weight:600;padding:4px 10px;border:1px solid var(--line);border-radius:999px;margin-right:6px;background:var(--surface)}
+nav.bar a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.status{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:8px}
+.status .row{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
+.status b{font-family:var(--font-num)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi .v{font-family:var(--font-num);font-size:1.3rem;font-weight:600}
+.kpi .l{font-size:.78rem;color:var(--muted)}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--fg2)}
+.chip.on{background:var(--accent);color:var(--onchip);border-color:var(--accent)}
+.tw{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;white-space:nowrap}
+td{font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+table.heat td,table.heat th{text-align:center;padding:5px 4px;font-family:var(--font-num);font-size:.78rem}
+.pos{color:var(--pos);font-weight:600} .neg{color:var(--neg);font-weight:600}
+.rule{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px 16px 10px;margin:10px 0}
+.rule dl{display:grid;grid-template-columns:minmax(90px,32%) 1fr;gap:6px 14px;margin:8px 0}
+.rule dt{color:var(--muted);font-size:.85rem;font-weight:700}
+.rule dd{margin:0;min-width:0}
+.warn{background:var(--warn-bg);color:var(--warn-fg);border-radius:10px;padding:12px 14px;margin:12px 0;font-size:.92rem}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:10px 0;position:relative}
+.chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--fg2);padding:2px 8px 6px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.tip{position:absolute;pointer-events:none;background:var(--fg);color:var(--bg);font-size:.75rem;padding:6px 8px;border-radius:6px;font-family:var(--font-num);white-space:nowrap}
+details.faq{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:8px 0;padding:0 14px}
+details.faq summary{cursor:pointer;font-weight:700;padding:11px 0;list-style-position:outside}
+details.faq div{padding:0 0 12px;color:var(--fg)}
+details.more summary{cursor:pointer;color:var(--accent);font-weight:700;padding:6px 0}
+dl.gl .g{display:grid;grid-template-columns:minmax(110px,32%) 1fr;gap:10px;border-bottom:1px solid var(--line);padding:7px 0}
+dl.gl dt{font-weight:700} dl.gl dd{margin:0;color:var(--fg2);min-width:0}
+code,pre{font-family:var(--font-num);font-size:.8rem}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;line-height:1.45}
+ol,ul{padding-left:1.2em} li{margin:.25em 0}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">Crypto-TA-Edge · Report 2026-10-04 · v2 (setelah cek kritik) · data gratis saja</div>
+<h1>RMF: Rotasi Momentum + Flush Basket</h1>
+<div class="warn"><b>Baca bagian <a href="#update">Update v2</a> dulu.</b> Di candle HYPE hasilnya jauh lebih kecil dari backtest Binance di bawah, dan modal 100 USD mengubah risiko strategi.</div>
+<p class="sub">Strategi long-only untuk perp HYPE dari hasil backtest 1,29 juta kombinasi indikator. Semua angka dari backtest Binance 2020-01 s/d 2026-10. Ini hasil riset, bukan nasihat keuangan.</p>
+
+<nav class="bar" aria-label="Bagian">
+<a href="#update">Update v2</a><a href="#hariini">Hari ini</a><a href="#ringkas">Ringkas</a><a href="#aturan">Aturan</a><a href="#trade">Trade/bulan</a><a href="#koin">Koin</a><a href="#flush">Flush</a><a href="#hasil">Hasil 300$</a><a href="#skenario">Skenario</a><a href="#biaya">Biaya</a><a href="#insight">Insight</a><a href="#risiko">Risiko</a><a href="#jalan">Cara jalan</a><a href="#faq">FAQ</a><a href="#glosarium">Istilah</a>
+</nav>
+
+<h2 id="hariini">Status hari ini</h2>
+<div class="status">
+  <div class="row"><span class="eyebrow">Data close</span><b>[[ASOF]]</b><span class="note">(candle harian HYPE, diambil langsung dari API)</span></div>
+  <div class="row"><span class="eyebrow">Filter BTC</span><b>[[BTCOK]]</b><span>BTC [[BTC]] &gt; EMA50 [[EMA]]</span></div>
+  <div class="row"><span class="eyebrow">Momentum</span><span>Aktif, beli 10 koin: <b>[[PICKS]]</b></span></div>
+  <div class="row"><span class="eyebrow">Ukuran</span><span>300 USDC × 0,5 ÷ 10 = <b>[[PERCOIN]] USDC</b> per koin</span></div>
+  <div class="row"><span class="eyebrow">Flush</span><span>Tidak ada sinyal (maks 3 koin per candle 4h dalam 5 hari terakhir). Event terakhir: [[LASTFL]]</span></div>
+</div>
+<p class="note">Ranking berubah setiap hari, jadi daftar ini hanya berlaku untuk open 2026-10-04 07:00 WIB. Kalau mulai di hari lain, hitung ulang. Kalau sudah memegang posisi, berlaku aturan buffer: koin lama baru dijual saat peringkatnya &gt;15.</p>
+[[TODAY_TABLE]]
+<p class="note">Vol 30h = rata-rata volume harian di HYPE (juta USD). SUPER (0,3) dan INIT (0,2) tipis, tapi untuk order 15 USDC masih aman. Backtest tidak memakai filter likuiditas.</p>
+
+[[UPDATE]]
+<h2 id="ringkas">Ringkasan 30 detik (backtest Binance, versi v1)</h2>
+<div class="kpis">
+  <div class="kpi"><div class="v">[[FINAL]] $</div><div class="l">300 $ (Jan 2020) → Okt 2026</div></div>
+  <div class="kpi"><div class="v">[[CAGR]]</div><div class="l">CAGR backtest</div></div>
+  <div class="kpi"><div class="v">[[MAXDD]]</div><div class="l">Max drawdown</div></div>
+  <div class="kpi"><div class="v">[[SHARPE]]</div><div class="l">Sharpe</div></div>
+  <div class="kpi"><div class="v">[[OOS_FINAL]] $</div><div class="l">300 $ mulai Jan 2025 (OOS)</div></div>
+  <div class="kpi"><div class="v">[[OOS_DD]]</div><div class="l">Max DD sejak 2025</div></div>
+</div>
+<ul>
+<li><b>Dua bagian.</b> (A) Momentum: setiap pagi pegang 10 koin dengan return 14 hari terkuat, hanya saat BTC &gt; EMA50. (B) Flush: beli saat ≥10 koin panik serentak di 4h, SL/TP 2 ATR.</li>
+<li><b>Trade:</b> ±[[MOM_IN]] koin baru per bulan di momentum, dan ±[[FL_EV]] event flush per bulan (±[[FL_TR]] trade).</li>
+<li><b>Volatilitas:</b> [[VOL]] per tahun, bulan terburuk [[WM]], hari terburuk [[WD]], [[POSM]] bulan positif, underwater terlama [[UW]] hari.</li>
+<li><b>Peringatan utama:</b> data hanya berisi koin yang masih hidup dan ramai per Sep 2026, jadi angka di atas adalah batas atas.</li>
+</ul>
+
+<h3>Kenapa strategi ini</h3>
+<ol>
+<li>Dari 1,29 juta kombinasi indikator (VWAP, SMC, MA, RSI, volume, dst.), indikator satu chart <b>tidak</b> mengalahkan entry acak di 15m/1h. Yang lolos semua uji (2020–24, 2025–26, t harian, cek di candle HYPE) hanya dua: momentum lintas koin dan flush basket.</li>
+<li>Keduanya saling menutupi (korelasi mingguan 0,08). Momentum untung di fase bull. Flush untung saat panik massal, yang justru sering muncul saat momentum sedang off (contoh 2022: momentum −611 $, flush +329 $).</li>
+<li>Digabung, DD turun dari −67% (momentum 1× saja) ke [[MAXDD]].</li>
+<li>Semua dari candle. Tidak perlu OI, funding sebagai sinyal, atau data berbayar.</li>
+</ol>
+
+<h2 id="aturan">Aturan lengkap</h2>
+<h3>A. Rotasi momentum (TF harian)</h3>
+<div class="rule"><dl>
+<dt>Kapan</dt><dd>Sekali sehari setelah candle harian close: 00:00 UTC = 07:00 WIB.</dd>
+<dt>Filter</dt><dd>BTC close harian &gt; EMA50 dari close harian BTC. Kalau tidak: <b>jual semua</b> posisi momentum dan diam (cash).</dd>
+<dt>Universe</dt><dd>Semua perp HYPE yang belum delist dan sudah listing ≥ 60 hari. Backtest memakai aturan yang sama (≥60 hari data) di 150 perp Binance teratas.</dd>
+<dt>Ranking</dt><dd>Return 14 hari = close kemarin ÷ close 14 hari sebelumnya − 1. Urutkan dari tertinggi.</dd>
+<dt>Beli</dt><dd>Isi sampai 10 posisi dengan koin peringkat 1–10 yang belum dipegang, di harga open harian (07:00 WIB).</dd>
+<dt>Jual</dt><dd>Koin yang dipegang dijual kalau peringkatnya <b>&gt; 15</b> (buffer), atau filter BTC mati. Tidak ada TP, tidak ada SL harga.</dd>
+<dt>Ukuran</dt><dd>Setiap koin = ekuitas × 0,5 ÷ 10. Dengan 300 USDC: 15 USDC per koin. Ukuran posisi lama tidak di-rebalance; ukuran baru memakai ekuitas terbaru.</dd>
+<dt>Margin</dt><dd>Total momentum 0,5× ekuitas, jadi tidak perlu leverage. Pakai <b>cross margin di subaccount khusus</b>. Kalau isolated: maksimal 1–2× per koin. <b>Jangan 3–5× isolated</b> (saran v1 salah): saat crash 10 Okt 2025 median altcoin sempat −65% intrabar, dan posisi 3× akan terlikuidasi.</dd>
+</dl></div>
+
+<h3>B. Flush basket (TF 4 jam)</h3>
+<div class="rule"><dl>
+<dt>Kapan</dt><dd>Setiap close 4h: 07, 11, 15, 19, 23, 03 WIB.</dd>
+<dt>Sinyal per koin</dt><dd>(1) Close candle sebelumnya ≤ Bollinger bawah (SMA20 − 2σ) dan close candle ini &gt; Bollinger bawah. (2) Volume candle ini &gt; 1,5× rata-rata volume 20 candle.</dd>
+<dt>Syarat basket</dt><dd><b>≥ 10 koin</b> memberi sinyal di candle yang sama. Kalau kurang dari 10: tidak trade.</dd>
+<dt>Entry</dt><dd>Long semua koin itu (maksimal 15, pilih acak kalau lebih) di open candle 4h berikutnya.</dd>
+<dt>SL</dt><dd>Entry − 2 × ATR(14) 4h. Median jarak [[FS_SL]]% (10% event: &lt;[[FS_SL10]]%, 10% event: &gt;[[FS_SL90]]%).</dd>
+<dt>TP</dt><dd>Entry + 2 × ATR(14) 4h.</dd>
+<dt>Waktu</dt><dd>Keluar paksa setelah 48 candle (8 hari) kalau SL/TP belum kena.</dd>
+<dt>Risiko</dt><dd>0,5% ekuitas per koin (300 USDC → 1,5 USDC). Total per event maks 8%: kalau 15 koin, tiap koin 0,5% (total 7,5%). Notional = risiko ÷ jarak SL ≈ 19 USDC.</dd>
+</dl></div>
+
+<h3>Contoh hitung 300 USDC</h3>
+<ul>
+<li><b>Momentum hari ini:</b> beli [[PICKS]], masing-masing 15 USDC (total 150 USDC notional).</li>
+<li><b>Contoh flush:</b> ekuitas 300, 12 koin sinyal. Risiko per koin = min(0,5%, 8%/12) = 0,5% = 1,5 USDC. Untuk koin dengan ATR 4h = 3,5% dari harga: SL = 7% di bawah entry, TP = 7% di atas, notional = 1,5 ÷ 0,07 = 21,4 USDC. Kalau kena SL, rugi 1,5 USDC; kalau kena TP, untung 1,5 USDC (minus fee).</li>
+<li><b>Gabungan terburuk di backtest:</b> notional total [[GROSS_MAX]]× ekuitas (rata-rata [[GROSS_AVG]]×).</li>
+</ul>
+
+<h2 id="trade">Berapa trade per bulan</h2>
+<div class="kpis">
+  <div class="kpi"><div class="v">[[MOM_IN]]</div><div class="l">Koin baru momentum / bulan (rata-rata 81 bulan)</div></div>
+  <div class="kpi"><div class="v">[[MOM_ORD]]</div><div class="l">Order momentum / bulan (beli + jual)</div></div>
+  <div class="kpi"><div class="v">[[FL_EV]]</div><div class="l">Event flush / bulan</div></div>
+  <div class="kpi"><div class="v">[[FL_TR]]</div><div class="l">Trade flush / bulan</div></div>
+</div>
+<ul>
+<li>Di bulan yang filter BTC aktif: ±[[MOM_IN_ACT]] koin baru momentum per bulan, rata-rata 1–2 perubahan per hari.</li>
+<li>[[NOMOM]] dari 81 bulan momentum full cash (filter BTC mati sebulan penuh), dan [[NOFL]] bulan tanpa flush.</li>
+<li>Rata-rata posisi momentum dipegang [[MS_MEAN]] hari (median [[MS_MED]] hari). Flush median [[FS_HOLD]] jam.</li>
+</ul>
+[[TY_TABLE]]
+<details class="more"><summary>Tabel per bulan (81 bulan, terbaru di atas)</summary>
+[[TPM_TABLE]]
+<p class="note">*Total order = beli + jual momentum + 2 × trade flush (entry + exit). Order TP/SL yang dipasang tapi batal tidak dihitung.</p>
+</details>
+
+<h2 id="koin">Koin apa saja</h2>
+<p>Koin momentum <b>berganti setiap hari</b> mengikuti ranking. Dalam 6,7 tahun ada <b>[[NCOINS]] koin berbeda</b> yang pernah dipegang. Ada [[MS_N]] posisi; win rate per posisi [[MS_WR]]%, rata-rata per posisi +[[MS_AVG]]% (median [[MS_MEDR]]%). Posisi untung rata-rata +[[MS_AW]]%, posisi rugi [[MS_AL]]%. Artinya: banyak rugi kecil, sedikit untung besar.</p>
+<h3>14 hari terakhir di backtest (Binance)</h3>
+[[RH_TABLE]]
+<p class="note">Tanggal = hari sinyal (close). Posisi dibeli di open hari berikutnya.</p>
+<h3>Paling sering dipegang (2020–2026)</h3>
+[[COIN_TABLE]]
+<p class="note">Total % = jumlah return semua posisi koin itu (bukan majemuk). Rata2/posisi sudah setelah fee + funding.</p>
+<h3>Paling lama dipegang per tahun</h3>
+[[PY_TABLE]]
+<h3>Penyumbang untung &amp; rugi terbesar</h3>
+[[BEST_TABLE]]
+[[WORST_TABLE]]
+<h3>10 posisi terbaik &amp; terburuk</h3>
+[[MB_TABLE]]
+[[MW_TABLE]]
+<p class="note">Posisi terburuk −50% s/d −60% terjadi di koin baru 2025–2026. Karena tiap koin hanya 5% ekuitas, dampaknya ke akun sekitar −3%.</p>
+<h3>Lama pegang posisi momentum</h3>
+[[DH_TABLE]]
+
+<h2 id="flush">Detail flush basket</h2>
+<div class="kpis">
+  <div class="kpi"><div class="v">[[FS_EV]]</div><div class="l">Event (2020–2026)</div></div>
+  <div class="kpi"><div class="v">[[FS_TR]]</div><div class="l">Trade</div></div>
+  <div class="kpi"><div class="v">[[FS_WR]]%</div><div class="l">Trade menang</div></div>
+  <div class="kpi"><div class="v">+[[FS_R]]R</div><div class="l">Rata-rata per trade</div></div>
+</div>
+<ul>
+<li>[[FS_TP]]% kena TP, [[FS_SLH]]% kena SL, [[FS_TE]]% keluar karena waktu. Event untung: [[FS_EVWR]]%.</li>
+<li>Event terbaik: [[FS_BEST]]. Terburuk: [[FS_WORST]].</li>
+<li>Edge per jumlah koin (versi semua koin, SL/TP 2 ATR): 1 koin −0,04R; ≥10 koin +0,16R; ≥20 koin +0,28R; ≥30 koin +0,38R per event.</li>
+</ul>
+[[FEY_TABLE]]
+<h3>12 event terakhir</h3>
+[[FE_RECENT]]
+<details class="more"><summary>Semua 107 event</summary>[[FE_ALL]]</details>
+<h3>Koin yang paling sering ikut flush</h3>
+[[FC_TABLE]]
+
+<h2 id="hasil">Hasil modal 300 USDT (2020–2026)</h2>
+<div class="chart" id="c_eq"><div class="legend"><span><i style="background:var(--pos)"></i>RMF (setting final)</span><span><i style="background:#eb6834"></i>Momentum saja 1×</span><span><i style="background:#1baf7a"></i>Flush saja</span></div></div>
+<p class="note">Skala log, ekuitas mingguan. Sentuh/geser grafik untuk melihat nilai. Garis putus = mulai OOS (2025).</p>
+<div class="chart" id="c_dd"><div class="legend"><span><i style="background:var(--neg)"></i>Drawdown RMF (%)</span></div></div>
+[[Y_TABLE]]
+<p class="note">P&amp;L momentum dan flush dalam USD. Kolom Filter BTC ON = persentase hari momentum boleh aktif.</p>
+<h3>Return bulanan (%)</h3>
+[[HEAT]]
+<p class="note">Biru = untung, merah = rugi. Tahan/arahkan ke sel untuk melihat P&amp;L momentum vs flush dalam USD.</p>
+<h3>Peluang rugi menurut lama memegang</h3>
+[[ROLL_TABLE]]
+<p class="note">Contoh: dari semua jendela 12 bulan, [[R12P]]% berakhir rugi. Median +[[R12M]]%, terburuk [[R12W]]%.</p>
+<h3>Kalau mulai di tanggal berbeda (300 $, lihat 12 bulan kemudian)</h3>
+[[SD_TABLE]]
+<p class="note">Mulai di puncak bull (Okt 2021, Jan 2022) hampir impas atau rugi. Mulai April 2024 hanya +35% dalam setahun. Waktu mulai sangat menentukan.</p>
+<h3>Hanya periode OOS (mulai 2025-01-01)</h3>
+<p>300 → <b>[[OOS_FINAL]] $</b>, CAGR [[OOS_CAGR]], max DD [[OOS_DD]], bulan terburuk [[OOS_WM]], [[OOS_POSM]] bulan positif.</p>
+
+<h2 id="skenario">Skenario &amp; sensitivitas</h2>
+<h3>Jumlah koin × ukuran momentum (semua + flush, tanpa buffer)</h3>
+[[VAR_TABLE]]
+<p class="note">★ = setting final (dengan buffer hasilnya mirip, lihat tabel berikut). Makin sedikit koin, makin besar bulan terburuk: 3 koin di 0,5× pernah −45% sebulan.</p>
+<h3>Aturan buffer (10 koin, 0,5×)</h3>
+[[BUF_TABLE]]
+<p class="note">Buffer 15 dipilih: hasil sama dengan tanpa buffer, tapi koin baru per bulan turun dari 37,5 ke 23,2.</p>
+<h3>Variasi lain</h3>
+[[SENS_TABLE]]
+<p class="note">*Versi tanpa buffer. Semua variasi tetap positif. Yang paling berpengaruh: filter BTC (DD) dan biaya.</p>
+
+<h2 id="biaya">Biaya &amp; funding</h2>
+<ul>
+<li>Asumsi backtest: 0,07% per sisi (fee taker + slippage) + funding riil per settlement.</li>
+<li>Turnover momentum ±[[TURN]]% portofolio per hari aktif, sehingga fee ≈ [[FEE_PY]]% ekuitas per tahun. Funding momentum rata-rata [[FUND_PY]]% ekuitas per tahun, tapi tiap tahun sangat beda.</li>
+<li>Fee HYPE base tier sekitar 0,045% taker / 0,015% maker. Limit order bisa memangkas biaya.</li>
+</ul>
+[[COST_TABLE]]
+<p class="note">2026: strategi <b>menerima</b> ±2.200 $ funding karena banyak koin pump dengan funding negatif. Ini mungkin tidak terulang dan bisa berbeda di HYPE.</p>
+
+<h2 id="insight">Insight</h2>
+<ol>
+<li><b>Edge datang dari perbandingan antar koin.</b> Indikator TA klasik di satu chart tidak mengalahkan entry acak di 15m/1h. Yang bekerja: "koin mana yang paling kuat" (momentum) dan "berapa banyak koin yang panik bersamaan" (breadth).</li>
+<li><b>Filter BTC adalah separuh strategi.</b> Aktif [[BF_ON]]% hari. Di 2022 hanya 19%, sehingga momentum hampir tidak ikut bear.</li>
+<li><b>Untung datang bergerombol.</b> 5 bulan terbaik dari 81 menyumbang ±39% kenaikan. Berbulan-bulan datar, lalu +30–50% dalam sebulan. Berhenti di tengah drawdown berarti kehilangan bulan-bulan itu.</li>
+<li><b>Momentum menang hanya 38% posisi</b>, tapi pemenang rata-rata +27% vs pecundang −9%. Jangan menilai dari win rate.</li>
+<li><b>Flush menang 61% trade</b> dan paling membantu saat momentum lemah (2022, 2024–2025). Event makin sering: 26–27 per tahun di 2024–2025.</li>
+<li><b>Buffer 15 memangkas trade 38%</b> tanpa mengurangi hasil. Banyak keluar-masuk di peringkat 10–11 hanya membuang fee.</li>
+<li><b>Koin yang paling sering dipegang adalah major</b> (ETH, BNB, SOL, BTC, ADA). Penyumbang terbesarnya DOGE 2021 dan LAB 2026, dan posisi terburuknya koin baru 2025–2026.</li>
+<li><b>Waktu mulai menentukan.</b> 300 $ mulai Okt 2021 → 314 $ setahun kemudian; mulai Okt 2020 → 1.564 $.</li>
+</ol>
+
+<h2 id="risiko">Risiko &amp; hal yang perlu dipertimbangkan</h2>
+<div class="warn"><b>Bias data paling besar.</b> Universe = koin yang masih hidup dan ramai per Sep 2026. Koin yang pump lalu mati tidak ada di data, dan koin yang baru pump otomatis ikut. Agu–Sep 2026 (+37%, +34%) paling bias. Anggap CAGR backtest sebagai batas atas; hasil live bisa setengahnya atau lebih buruk.</div>
+<ol>
+<li><b>2021 (+330%) adalah musim alt</b> yang belum tentu terulang. Tanpa 2021, CAGR jauh lebih kecil.</li>
+<li><b>Siapkan mental untuk DD −30 s/d −50%</b> dan underwater lebih dari 1 tahun (backtest: [[UW]] hari, 2023).</li>
+<li><b>Aturan berhenti sebelum mulai:</b> DD &gt; 45%, atau 9 bulan kalah dari "beli semua koin", atau forward test 3 bulan jauh di bawah backtest.</li>
+<li><b>Eksekusi HYPE:</b> minimum order 10 USDC, pembulatan ukuran (szDecimals), likuiditas koin kecil, dan funding per jam yang bisa beda dari Binance.</li>
+<li><b>Satu koin satu posisi di HYPE:</b> kalau momentum dan flush memegang koin yang sama, TP/SL flush harus reduce-only seukuran bagian flush saja.</li>
+<li><b>Pisahkan dari MEX 3.0:</b> pakai subaccount sendiri dan cek koin yang overlap.</li>
+<li><b>Jam eksekusi:</b> flush dicek 6× sehari termasuk 03:00 WIB. Tanpa bot, flush akan sering terlewat.</li>
+<li><b>Belum diuji:</b> SL harga untuk momentum, eksekusi telat, filter likuiditas, dan koin yang sudah delist. Jangan menambahkannya tanpa uji.</li>
+<li><b>Mulai pelan:</b> paper trading atau ukuran sangat kecil selama 2–3 bulan. Jangan naikkan momentum ke 1× (DD bisa −58% s/d −67%).</li>
+<li><b>Belum ada holdout baru.</b> Pemilihan 10 koin dan buffer 15 dilihat dari periode penuh (termasuk 2025–2026). Tetangganya juga positif, tapi tetap ada sedikit bias pemilihan.</li>
+</ol>
+
+<h2 id="jalan">Cara menjalankan</h2>
+<h3>Rutinitas</h3>
+<ol>
+<li><b>07:00 WIB (harian):</b> ambil candle harian semua perp HYPE → cek BTC &gt; EMA50 → hitung ranking 14 hari → jual yang peringkat &gt;15 (atau semua kalau filter mati) → beli peringkat 1–10 yang belum dipegang, 0,5×ekuitas÷10 per koin.</li>
+<li><b>Setiap close 4h:</b> hitung sinyal flush semua koin → kalau ≥10 koin: entry long (maks 15), pasang SL & TP reduce-only (2 ATR), catat waktu entry untuk time stop 48 candle.</li>
+<li><b>Mingguan:</b> catat ekuitas, bandingkan dengan backtest dan dengan basket "beli semua koin".</li>
+</ol>
+<h3>Pseudo-code</h3>
+<pre>
+# harian 00:00 UTC
+coins = [c for c in hype_perps() if listed_days(c) &gt;= 60]
+C = daily_close(coins)                 # API: POST /info {"type":"candleSnapshot",...,"interval":"1d"}
+btc_ok = C["BTC"][-1] &gt; ema(C["BTC"], 50)[-1]
+rank = sort_desc({c: C[c][-1]/C[c][-15]-1 for c in coins})   # 1 = terkuat
+if not btc_ok:
+    close_all_momentum()
+else:
+    for c in held_momentum():
+        if rank[c] &gt; 15: sell(c)
+    for c in top(rank, 10):
+        if c not in held_momentum() and len(held_momentum()) &lt; 10:
+            buy(c, notional = equity()*0.5/10)
+
+# setiap close 4h
+sig = [c for c in coins if close[-2] &lt;= bb_low[-2] and close[-1] &gt; bb_low[-1]
+                         and vol[-1] &gt; 1.5*sma(vol,20)[-1]]
+if len(sig) &gt;= 10:
+    pick = random.sample(sig, min(15, len(sig)))
+    r = min(0.005, 0.08/len(pick)) * equity()
+    for c in pick:
+        a = atr14_4h(c); px = next_open(c)
+        buy(c, notional = r/(2*a/px), sl = px-2*a, tp = px+2*a, max_bars = 48)
+</pre>
+<h3>Data yang dibutuhkan (semua gratis)</h3>
+<ul>
+<li>Candle 1D dan 4H semua perp HYPE: <code>POST https://api.hyperliquid.xyz/info</code>, body <code>{"type":"candleSnapshot","req":{"coin":"SOL","interval":"1d","startTime":..,"endTime":..}}</code>.</li>
+<li>Daftar koin & szDecimals: <code>{"type":"meta"}</code>.</li>
+<li>Tidak perlu OI, funding, atau taker volume.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+[[FAQ]]
+
+<h2 id="glosarium">Istilah</h2>
+<dl class="gl">[[GLOSS]]</dl>
+
+<h2>Metodologi singkat</h2>
+<ul>
+<li>Data: candle Binance USDT-perp, 150 koin hidup dengan volume terbesar (Sep 2026), 2020-01 s/d 2026-10-02. Cek silang: candle HYPE harian.</li>
+<li>Eksekusi: sinyal di close, entry di open berikutnya (tanpa lookahead). Biaya 0,07%/sisi + funding riil sebagai biaya.</li>
+<li>Seleksi: IS 2020–2024, OOS 2025–2026 (disetujui). Uji t harian untuk menghindari double count antar koin.</li>
+<li>Simulasi akun: ekuitas harian majemuk mulai 300 $, momentum 0,5× notional, flush risiko 0,5%/koin (maks 8%/event, maks 15 koin).</li>
+<li>File: <code>C:\Crypto data\Crypto-Momentum Rotations+Flush Basket</code> → reports/REPORT_TA_EDGE.md, reports/STRATEGY_RMF.md, research/strategy_sim.py, research/report_data.py.</li>
+</ul>
+<p class="note">Report ini hasil backtest dan riset, bukan nasihat keuangan atau rekomendasi investasi.</p>
+</div>
+
+<script>
+const DATA = [[DATA_JS]];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function lineChart(id, series, opt){
+  const host = document.getElementById(id);
+  const W = 720, H = opt.h || 300, L = 54, R = 12, T = 12, B = 26;
+  const all = series.flatMap(s => s.data.map(d => d[1]));
+  const t0 = new Date(series[0].data[0][0]).getTime(), t1 = new Date(series[0].data[series[0].data.length-1][0]).getTime();
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (opt.log){ lo = Math.log10(Math.max(lo, 1)); hi = Math.log10(hi); } else { hi = Math.max(hi, 0); }
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const yv = v => opt.log ? Math.log10(Math.max(v, 1)) : v;
+  const y = v => T + (hi - yv(v)) / (hi - lo) * (H - T - B);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', opt.label);
+  const el = (n, a) => { const e = document.createElementNS(ns, n); for (const k in a) e.setAttribute(k, a[k]); svg.appendChild(e); return e; };
+  const ticks = opt.log ? [100, 300, 1000, 3000, 10000, 30000, 100000].filter(v => Math.log10(v) >= lo - 0.05 && Math.log10(v) <= hi + 0.05) : opt.ticks;
+  ticks.forEach(v => { el('line', {x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css('--line'), 'stroke-width': 1});
+    const tx = el('text', {x: L - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted')}); tx.textContent = opt.fmt(v); });
+  for (let yr = 2020; yr <= 2026; yr++){ const t = new Date(`${yr}-01-01`).getTime(); if (t < t0) continue;
+    const tx = el('text', {x: x(t), y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: css('--muted')}); tx.textContent = yr; }
+  const oos = x(new Date('2025-01-01').getTime());
+  el('line', {x1: oos, x2: oos, y1: T, y2: H - B, stroke: css('--muted'), 'stroke-dasharray': '4 4', 'stroke-width': 1});
+  series.forEach(s => {
+    const d = s.data.map((p, i) => (i ? 'L' : 'M') + x(new Date(p[0]).getTime()).toFixed(1) + ' ' + y(p[1]).toFixed(1)).join('');
+    if (s.area){ el('path', {d: d + `L${x(t1)} ${y(0)}L${x(t0)} ${y(0)}Z`, fill: s.color, 'fill-opacity': 0.15, stroke: 'none'}); }
+    el('path', {d, fill: 'none', stroke: s.color, 'stroke-width': s.w || 2, 'stroke-linejoin': 'round'});
+  });
+  const cross = el('line', {y1: T, y2: H - B, stroke: css('--fg2'), 'stroke-width': 1, visibility: 'hidden'});
+  const dots = series.map(s => el('circle', {r: 4, fill: s.color, stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}));
+  host.appendChild(svg);
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; host.appendChild(tip);
+  const n = series[0].data.length;
+  function move(ev){
+    const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - L) / (W - L - R) * (n - 1))));
+    const p = series[0].data[i]; const cx = x(new Date(p[0]).getTime());
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    series.forEach((s, k) => { const q = s.data[i]; dots[k].setAttribute('cx', cx); dots[k].setAttribute('cy', y(q[1])); dots[k].setAttribute('visibility', 'visible'); });
+    tip.innerHTML = p[0] + '<br>' + series.map(s => s.name + ': ' + opt.fmtTip(s.data[i][1])).join('<br>');
+    tip.hidden = false;
+    const hx = (cx / W) * r.width; tip.style.left = Math.min(Math.max(hx - 70, 4), r.width - 170) + 'px'; tip.style.top = '30px';
+  }
+  svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); dots.forEach(d => d.setAttribute('visibility', 'hidden')); });
+}
+function draw(){
+  document.querySelectorAll('.chart svg, .chart .tip').forEach(e => e.remove());
+  const usd = v => Math.round(v).toLocaleString('id-ID') + ' $';
+  lineChart('c_eq', [
+    {name: 'Momentum 1×', color: '#eb6834', data: DATA.mom, w: 1.6},
+    {name: 'Flush', color: '#1baf7a', data: DATA.fl, w: 1.6},
+    {name: 'RMF', color: css('--pos'), data: DATA.eq, w: 2.6}],
+    {log: true, h: 320, label: 'Ekuitas 300 USDT 2020-2026, skala log', fmt: v => v >= 1000 ? (v/1000) + 'rb' : v, fmtTip: usd});
+  lineChart('c_dd', [{name: 'Drawdown', color: css('--neg'), data: DATA.dd, area: true, w: 1.6}],
+    {h: 180, ticks: [0, -10, -20, -30], label: 'Drawdown RMF', fmt: v => v + '%', fmtTip: v => v.toFixed(1) + '%'});
+}
+draw();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+</script>

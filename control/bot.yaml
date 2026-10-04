@@ -1,0 +1,15 @@
+# Kendali bot RMF. Dibaca watcher SETIAP siklus (~10 menit).
+# Ubah lewat workflow (PowerShell / CMD / Git Bash):
+#   gh workflow run control.yml -f momentum=live
+#   gh workflow run control.yml -f momentum=flatten      # tutup semua posisi live
+#   gh workflow run control.yml -f reset_breaker=true
+#
+# momentum: off | paper | live | manage | flatten
+#   paper   hanya buku paper (default)
+#   live    paper + live di subaccount (jual + beli)
+#   manage  paper + live hanya jual (tanpa beli baru)
+#   flatten paper + tutup semua posisi live tiap siklus
+# flush:    off | paper
+momentum: "paper"
+flush: "paper"
+breaker_reset: ""

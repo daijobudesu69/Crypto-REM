@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.env
+# hasil riset berat, regenerasi dengan script di research/
+research/results/*.parquet
+*.log
+# salinan origin:control/bot.yaml yang ditulis tools/refresh_state.sh
+.rmf_control_origin.yaml
+.rmf_control_origin.yaml.tmp
+state/.tmp_*

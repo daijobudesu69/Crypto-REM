@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.csv text eol=lf
+*.png binary
+*.pkl binary
+
+# Log di state/ append-only: dua run yang menambah baris bersamaan pasti bentrok
+# saat rebase. "union" menyimpan baris dari kedua sisi.
+state/*.csv merge=union

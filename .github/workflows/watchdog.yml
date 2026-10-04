@@ -1,0 +1,41 @@
+name: RMF watchdog
+
+# Alarm kalau watcher (bot.yml) tidak mencatat > 90 menit, dan nyalakan watcher
+# baru kalau tidak ada yang jalan. Menit dipilih menjauhi :00 dan slot bot.yml.
+on:
+  schedule:
+    - cron: "3,18,33,48 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write     # state/watchdog.json
+  actions: write      # baca status run bot.yml + dispatch watcher baru
+
+concurrency:
+  group: rmf-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Cek watcher
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash tools/refresh_state.sh || true
+          timeout -k 30 300 python run_watchdog.py
+      - name: Simpan state watchdog
+        if: always()
+        run: bash tools/save_state.sh "watchdog: $(date -u +%Y-%m-%dT%H:%MZ)"

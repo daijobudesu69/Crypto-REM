@@ -1,0 +1,11 @@
+# Dipin ke versi yang sudah terbukti jalan di runner GitHub (Python 3.11,
+# ubuntu-24.04) di Crypto-MEX. Naikkan lewat PR supaya CI mengujinya dulu.
+numpy==2.4.6
+pandas==3.0.5
+requests==2.34.2
+PyYAML==6.0.3
+# Google Sheets via service account (opsional, rmf/sheets.py)
+google-auth==2.57.0
+# Eksekusi live HYPE (rmf/live.py). Diimpor malas: tidak dipakai di mode paper.
+hyperliquid-python-sdk==0.24.0
+eth-account==0.13.7

@@ -1,0 +1,55 @@
+name: RMF control
+
+# Ganti mode bot. Menulis control/bot.yaml di main; watcher membacanya setiap
+# siklus, jadi berlaku <= ~10 menit. Dari PowerShell / CMD / Git Bash:
+#   gh workflow run control.yml -f momentum=live
+#   gh workflow run control.yml -f momentum=manage      # rem: tanpa beli baru
+#   gh workflow run control.yml -f momentum=flatten     # tutup semua posisi live
+#   gh workflow run control.yml -f momentum=paper       # kembali paper saja
+#   gh workflow run control.yml -f flush=off
+#   gh workflow run control.yml -f reset_breaker=true
+# Telegram mengonfirmasi "mode sekarang: ..." begitu watcher memakainya.
+on:
+  workflow_dispatch:
+    inputs:
+      momentum:
+        description: "mode momentum (tetap = tidak diubah)"
+        type: choice
+        # Dikutip: YAML 1.1 membaca off tanpa kutip sebagai boolean false.
+        options: ["tetap", "off", "paper", "live", "manage", "flatten"]
+        default: tetap
+      flush:
+        description: "mode flush (tetap = tidak diubah)"
+        type: choice
+        options: ["tetap", "off", "paper"]
+        default: tetap
+      reset_breaker:
+        description: "reset breaker DD live (puncak = ekuitas sekarang)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rmf-control
+  cancel-in-progress: false
+
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install PyYAML==6.0.3
+      - name: Tulis control/bot.yaml
+        env:
+          MOMENTUM: ${{ inputs.momentum }}
+          FLUSH: ${{ inputs.flush }}
+          RESET: ${{ inputs.reset_breaker }}
+        run: bash tools/save_control.sh
