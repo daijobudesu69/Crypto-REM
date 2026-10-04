@@ -35,6 +35,15 @@ def test_unknown_config_key_rejected():
         config.from_dict({"execution": {"margin_mode": "isolated", "leverage": 5}})
 
 
+def test_all_workflows_are_valid_yaml():
+    d = os.path.join(ROOT, ".github", "workflows")
+    for f in os.listdir(d):
+        doc = yaml.safe_load(wf(f))
+        assert doc.get("name") and doc.get("jobs"), f
+        on = doc.get("on", doc.get(True))
+        assert "workflow_dispatch" in on, f"{f}: tanpa workflow_dispatch"
+
+
 def test_agent_secret_name_matches_workflow(cfg):
     assert f"secrets.{cfg.execution.agent_secret}" in wf("bot.yml")
 

@@ -38,4 +38,5 @@ jobs:
           timeout -k 30 300 python run_watchdog.py
       - name: Simpan state watchdog
         if: always()
-        run: bash tools/save_state.sh "watchdog: $(date -u +%Y-%m-%dT%H:%MZ)"
+        run: |
+          bash tools/save_state.sh "watchdog: $(date -u +%Y-%m-%dT%H:%MZ)"
