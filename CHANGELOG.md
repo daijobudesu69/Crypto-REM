@@ -3,6 +3,16 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.5 — 2026-10-05
+
+Infrastruktur; aturan strategi tidak berubah.
+- Watcher menyalakan penggantinya sendiri: cron GitHub di repo ini hanya terpicu
+  tiap 3-6 jam (terukur 4-5 Okt; watchdog terakhir jalan 06:17 UTC), sehingga
+  watcher yang selesai pukul 13:02 UTC tidak punya pengganti. Saat anggaran
+  waktunya habis, watcher (mode loop) dispatch bot.yml lewat GITHUB_TOKEN; run
+  baru antre di concurrency group dan mulai begitu job lama selesai. Cron dan
+  watchdog tetap cadangan.
+
 ## rmf-0.1.4 — 2026-10-05
 
 Alat uji; aturan strategi tidak berubah.
