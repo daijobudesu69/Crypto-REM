@@ -442,8 +442,6 @@ def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) 
         lines += ["", _live_message(out["live"], ctx, short=True)]
     else:
         lines.append(f"  live: mode <b>{ctx.ctrl.momentum}</b>")
-    lines += ["", "<i>Pesan ini muncul 1× sehari setelah candle harian close (07:00 WIB). "
-                  "Event flush dan alarm dikirim terpisah, hanya kalau ada.</i>"]
     return "\n".join(lines)
 
 
