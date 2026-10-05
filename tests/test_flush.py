@@ -70,6 +70,24 @@ def test_size_event_gross_cap(cfg):
     assert not plans and "gross" in rej[0][1]
 
 
+def test_size_event_total_risk_not_capped_like_research(cfg):
+    """Q1 audit 2026-10-05: 15 koin yang dipaksa minimum order (risiko 1,6 USDC
+    masing-masing, <= 2x target) semuanya diterima walau total 24 USDC = 12% > 8%,
+    sama dengan small_capital.simulate (tanpa hard cap)."""
+    cands = [(f"C{i:02d}", 1.0, 0.08) for i in range(15)]
+    plans, rej = fl.size_event(cands, 200.0, 0.0, cfg)
+    assert len(plans) == 15 and not rej
+    assert abs(sum(p.risk_usd for p in plans) - 24.0) < 1e-9
+
+
+def test_size_event_target_is_min_of_coin_and_event_share(cfg):
+    """Risiko per koin = min(0,5%, 8% / n). n <= 15 -> 0,5%; n = 20 -> 0,4%."""
+    p15, _ = fl.size_event([(f"C{i:02d}", 1.0, 0.01) for i in range(15)], 200.0, 0.0, cfg)
+    assert all(abs(p.risk_usd - 1.0) < 1e-9 for p in p15)
+    p20, _ = fl.size_event([(f"C{i:02d}", 1.0, 0.01) for i in range(20)], 1000.0, 0.0, cfg)
+    assert all(abs(p.risk_usd - 4.0) < 1e-9 for p in p20)         # 1000 x 8% / 20
+
+
 def _pos(entry_bar, stop=95.0, target=105.0):
     return {"entry_bar": entry_bar.isoformat(), "stop": stop, "target": target, "last_bar": None, "bars_held": 0}
 

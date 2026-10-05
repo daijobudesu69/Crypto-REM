@@ -59,6 +59,9 @@ flush:
   max_bars: 48                # keluar paksa setelah 48 candle 4h (8 hari)
   atr_history_bars: 200       # candle 4h HYPE untuk ATR
   risk_pct: 0.5               # risiko per koin, % ekuitas
+  # Risiko per koin = min(risk_pct, max_event_risk_pct / n koin), seperti
+  # simulasi riset. Total event TIDAK dipotong (bisa > 8% karena minimum order;
+  # keputusan pemilik 2026-10-05, lihat docs/audit/AUDIT_2026-10-05.md Q1).
   max_event_risk_pct: 8.0
   reject_forced_risk_x: 2.0   # tolak koin kalau minimum order memaksa risiko > 2x target
   gross_cap_x: 2.0            # notional momentum + flush <= 2x ekuitas

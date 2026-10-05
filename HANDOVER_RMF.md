@@ -35,7 +35,7 @@ Ditulis 2026-10-04, di akhir sesi riset. Folder proyek: `C:\Crypto data\Crypto-M
 | Syarat | **≥10 koin** memberi sinyal di candle yang sama |
 | Entry | Long semua (maks 15, acak) di open 4h berikutnya |
 | SL / TP / waktu | Entry ∓ **2 × ATR(14) 4h**, keluar paksa setelah 48 candle (8 hari) |
-| Risiko | 0,5% ekuitas per koin, maks 8% per event |
+| Risiko | min(0,5%, 8% ÷ jumlah koin) ekuitas per koin. Total event **tidak dipotong** (bisa > 8% karena minimum order; maks ±11% di simulasi). Hard cap 8% dihapus 2026-10-05, lihat docs/audit/AUDIT_2026-10-05.md Q1 |
 | Aturan v2 | Tolak koin kalau risiko yang dipaksa minimum order > 2× target. Total notional (momentum + flush) ≤ 2× ekuitas |
 | **Sumber sinyal** | **Harus candle futures Binance.** Sinyal dari candle HYPE: +0,02R per event (tidak ada edge). Dari candle spot Binance: +0,05R, t 0,5 (tidak terbukti). Dari futures Binance lalu dieksekusi di HYPE: **+0,18R** |
 

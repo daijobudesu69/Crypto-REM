@@ -11,9 +11,10 @@ Satu siklus 4h (setelah candle 4h close):
   * long semua koin itu yang ada di HYPE (maks 15, acak dengan seed = waktu bar),
     entry di open 4h berikutnya, SL/TP = entry -/+ 2 x ATR(14) 4h HYPE di bar
     sinyal, keluar paksa setelah 48 candle.
-  * ukuran: risiko 0,5% ekuitas per koin; minimum order 10 USDC; tolak kalau
-    minimum memaksa risiko > 2x target; total risiko event <= 8%; total
-    notional momentum + flush <= 2x ekuitas.
+  * ukuran: risiko min(0,5%, 8% / n koin) ekuitas per koin; minimum order 10 USDC;
+    tolak kalau minimum memaksa risiko > 2x target; total notional momentum +
+    flush <= 2x ekuitas. Total risiko event TIDAK dipotong (sama dengan simulasi
+    riset; bisa > 8% karena minimum order, maks ~11% di simulasi).
 """
 from __future__ import annotations
 
@@ -87,16 +88,20 @@ class Plan:
 def size_event(cands: list, equity: float, gross_used: float, cfg) -> tuple[list, list]:
     """cands: [(coin, entry_px, atr)] -> (rencana yang diterima, [(coin, alasan tolak)]).
 
-    Aturan v2 riset (small_capital.py): tolak koin kalau minimum order memaksa
-    risiko > 2x target, batas risiko event 8%, batas gross 2x ekuitas.
+    Aturan v2 riset (small_capital.simulate): risiko per koin = min(risk_pct,
+    max_event_risk_pct / n) dengan n = jumlah koin event, tolak koin kalau minimum
+    order memaksa risiko > 2x target, batas gross 2x ekuitas. Total risiko event
+    TIDAK dipotong: hard cap 8% dihapus atas keputusan pemilik 2026-10-05 setelah
+    simulasi ulang (research/q1_event_cap.py: 410,6 tanpa cap vs 397,5 dengan
+    cap; 20 seed: cap tidak pernah lebih baik). Lihat docs/audit/AUDIT_2026-10-05.md Q1.
     """
     f = cfg.flush
     min_usd = cfg.momentum.min_order_usdc
-    risk_target = equity * f.risk_pct / 100
-    risk_cap = equity * f.max_event_risk_pct / 100
+    n = max(len(cands), 1)
+    risk_target = equity * min(f.risk_pct / 100, f.max_event_risk_pct / 100 / n)
     gross_cap = equity * f.gross_cap_x
     out, rej = [], []
-    risk_sum, gross = 0.0, gross_used
+    gross = gross_used
     for coin, px, a in cands:
         if not (np.isfinite(a) and np.isfinite(px)) or px <= 0:
             rej.append((coin, "ATR/harga tidak tersedia"))
@@ -113,13 +118,9 @@ def size_event(cands: list, equity: float, gross_used: float, cfg) -> tuple[list
         if forced and risk > f.reject_forced_risk_x * risk_target:
             rej.append((coin, f"minimum order memaksa risiko {risk:.2f} > {f.reject_forced_risk_x:g}x target"))
             continue
-        if risk_sum + risk > risk_cap + 1e-9:
-            rej.append((coin, "batas risiko event"))
-            continue
         if gross + notional > gross_cap + 1e-9:
             rej.append((coin, "batas gross 2x ekuitas"))
             continue
-        risk_sum += risk
         gross += notional
         out.append(Plan(coin, px, a, px - f.sl_atr * a, px + f.tp_atr * a, stop_frac, notional, risk, forced))
     return out, rej

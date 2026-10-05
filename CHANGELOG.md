@@ -6,7 +6,13 @@ dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 ## rmf-0.1.2 — 2026-10-05
 
 Audit infrastruktur ([docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md)).
-Aturan strategi tidak berubah; Q1/Q2 (flush) menunggu keputusan pemilik.
+Aturan strategi momentum tidak berubah. Flush (paper), keputusan pemilik:
+- Q1: hard cap risiko event 8% DIHAPUS, sizing kembali sama dengan simulasi riset
+  (small_capital.simulate): risiko per koin = min(0,5%, 8% / n koin), total event
+  tidak dipotong (bisa > 8% karena minimum order). Simulasi ulang
+  (research/q1_event_cap.py): 200 -> 410,6 tanpa cap vs 397,5 dengan cap 8%;
+  20 seed: cap tidak pernah lebih baik. Risiko event maks di simulasi 11-12,6%.
+- Q2: tetap (pilih acak 15 dulu, baru buang yang tidak bisa diperdagangkan).
 - F1: candle 1d koin yang gagal di-fetch tidak lagi membuat posisinya dijual;
   siklus dicoba ulang sampai 03:00 UTC, lalu jalan dengan alarm.
 - F2: order beli live yang timeout tapi terisi tetap tercatat milik RMF (tidak HALT).
