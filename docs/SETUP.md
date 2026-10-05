@@ -120,6 +120,19 @@ gh workflow run smoke.yml --repo daijobudesu69/Crypto-RMF
 
 ## 6. Menyalakan live (user sendiri)
 
+Sebelumnya, jalankan **canary** sekali (mode harus `paper`/`off`):
+
+```bash
+gh workflow run canary.yml --repo daijobudesu69/Crypto-RMF -f coin=ETH
+```
+
+Canary membeli ~10 USDC lalu langsung menjual (biaya ±0,01 USDC fee + spread)
+lewat jalur order yang sama dengan live: API wallet, leverage cross 1x, beli IOC,
+posisi terlihat, ekuitas saat posisi terbuka, jual reduce-only. Hasil tiap langkah
+dan komponen ekuitas dikirim ke Telegram. Nyalakan live hanya kalau "✅ RMF CANARY
+OK", dan cocokkan ekuitas di pesan itu dengan nilai akun di UI HYPE.
+
+
 ```bash
 gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=live
 ```

@@ -3,6 +3,14 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.4 — 2026-10-05
+
+Alat uji; aturan strategi tidak berubah.
+- Canary (`canary.yml`, `run_canary.py`, `rmf/canary.py`), pola Crypto-MEX: manual,
+  1 trade ~10 USDC beli IOC lalu jual reduce-only lewat jalur order live, setiap
+  langkah + komponen ekuitas saat posisi terbuka ke Telegram. Ditolak kalau mode
+  live/manage/flatten. Tidak menulis state/.
+
 ## rmf-0.1.3 — 2026-10-05
 
 Rem darurat baru; aturan strategi tidak berubah. Keputusan pemilik 2026-10-05.
