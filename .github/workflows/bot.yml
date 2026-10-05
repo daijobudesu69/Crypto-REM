@@ -6,6 +6,12 @@ name: RMF bot
 # sendiri tiap 10 menit. Dengan concurrency group, jadwal yang jatuh saat
 # watcher masih hidup ANTRE lalu langsung mulai begitu yang lama selesai.
 #
+# Di repo ini cron ternyata hanya terpicu tiap 3-6 jam (terukur 4-5 Okt 2026),
+# jadi watcher yang selesai bisa meninggalkan celah berjam-jam. Karena itu watcher
+# (mode loop) MENYALAKAN PENGGANTINYA SENDIRI saat anggaran waktunya habis:
+# dispatch bot.yml lewat GITHUB_TOKEN -> antre di concurrency group -> mulai begitu
+# job ini selesai. Cron dan watchdog tetap ada sebagai cadangan.
+#
 # Satu siklus (run_cycle.py) idempoten: momentum hanya jalan sekali per hari UTC
 # (setelah 00:02 UTC = 07:02 WIB), flush sekali per candle 4h.
 #
@@ -24,6 +30,7 @@ on:
 
 permissions:
   contents: write
+  actions: write      # dispatch watcher pengganti (gh workflow run bot.yml)
 
 concurrency:
   group: rmf-state
@@ -57,12 +64,17 @@ jobs:
           # Nama secret harus sama dengan execution.agent_secret di config.yaml
           # (dicek tests/test_repo.py). Kosong = live tidak bisa jalan, paper tetap.
           AGENT_KEY_IN: ${{ secrets.HYPE_RMF_AGENT_KEY_66_CHAR }}
+          GH_TOKEN_IN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
           # Kunci API wallet hanya untuk run_cycle.py: dipindah ke variabel shell
           # (tidak di-export) supaya git dan script lain tidak bisa membacanya.
           agent_key="${AGENT_KEY_IN:-}"
           unset AGENT_KEY_IN
+          # Token GitHub hanya untuk dispatch watcher pengganti di akhir job.
+          gh_token="${GH_TOKEN_IN:-}"
+          unset GH_TOKEN_IN
+          chain=0
           INTERVAL=600
           # Siklus terakhir harus MULAI cukup awal supaya selesai (timeout 1500 s +
           # 30 s kill + ~2 menit simpan state) sebelum timeout-minutes 350 job;
@@ -100,11 +112,20 @@ jobs:
             nap=$INTERVAL
             if [ $(( due - now )) -lt "$nap" ]; then nap=$(( due - now )); fi
             if [ $(( now + nap )) -ge "$DEADLINE" ]; then
-              echo "[watch] anggaran waktu habis; cron berikutnya menyalakan ulang"
+              echo "[watch] anggaran waktu habis"
+              chain=1
               break
             fi
             echo "[watch] cek berikutnya dalam ${nap}s"
             sleep "$nap"
           done
+          if [ "${MODE}" = "loop" ] && [ "$chain" = "1" ]; then
+            # Gagal dispatch tidak menggagalkan job: cron + watchdog tetap cadangan.
+            if GH_TOKEN="$gh_token" gh workflow run bot.yml --repo "$GITHUB_REPOSITORY" --ref "${GITHUB_REF_NAME:-main}" -f mode=loop; then
+              echo "[watch] watcher pengganti dinyalakan (antre, mulai begitu job ini selesai)"
+            else
+              echo "::warning::gagal menyalakan watcher pengganti; menunggu cron/watchdog"
+            fi
+          fi
           echo "[watch] selesai setelah ${n} siklus (exit ${worst})"
           exit "$worst"

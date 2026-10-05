@@ -134,3 +134,35 @@ def test_watcher_wakes_right_after_candle_close(cfg):
     assert nap_at("00:02:30") == 600        # sudah lewat: kembali ke interval 10 menit
     assert nap_at("10:00:00") == 600
     assert nap_at("11:57:00") == 310        # candle 4h 12:00 -> 12:02:10
+
+
+def test_watcher_dispatches_its_successor_only_in_loop_mode(tmp_path):
+    """Cron di repo ini hanya terpicu tiap 3-6 jam: watcher loop yang anggaran
+    waktunya habis harus menyalakan penggantinya sendiri (gh workflow run)."""
+    import shutil
+    import subprocess
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash tidak ada")
+    body = wf("bot.yml")
+    doc = yaml.safe_load(body)
+    assert doc["permissions"].get("actions") == "write"
+    assert "GH_TOKEN_IN: ${{ secrets.GITHUB_TOKEN }}" in body and "unset GH_TOKEN_IN" in body
+    tail = body[body.index('          if [ "${MODE}" = "loop" ] && [ "$chain" = "1" ]'):
+                body.index('          echo "[watch] selesai setelah')]
+    fake = tmp_path / "gh"
+    fake.write_text('#!/usr/bin/env bash\necho "GH $GH_TOKEN $*"\n', newline="\n")
+    fake.chmod(0o755)
+
+    d = tmp_path.as_posix()
+    if re.match(r"^[A-Za-z]:/", d):                         # Git Bash di Windows: C:/x -> /c/x
+        d = "/" + d[0].lower() + d[2:]
+
+    def run(mode, chain):
+        script = f'export PATH="{d}:$PATH"\nMODE={mode}\nchain={chain}\ngh_token=tok\n' \
+                 'GITHUB_REPOSITORY=o/r\nGITHUB_REF_NAME=main\n' + tail
+        return subprocess.run([bash, "-c", script], capture_output=True, text=True, check=True).stdout
+
+    out = run("loop", 1)
+    assert "GH tok workflow run bot.yml --repo o/r --ref main -f mode=loop" in out
+    assert "GH " not in run("once", 0) and "GH " not in run("loop", 0)
