@@ -1,0 +1,51 @@
+name: RMF canary
+
+# Uji jalur order live RMF yang SESUNGGUHNYA di akun HYPE, dengan 1 trade kecil:
+# beli IOC ~10 USDC lalu langsung jual reduce-only (rmf/canary.py). Pola dari
+# Crypto-MEX, tapi RMF memakai order market yang langsung terisi, jadi canary ini
+# memang terisi (biaya ±0,01 USDC fee + spread). Hasil tiap langkah ke Telegram,
+# termasuk komponen ekuitas saat posisi terbuka (cek mode unifiedAccount).
+# Jalankan sebelum menyalakan live (mode harus paper/off):
+#
+#   gh workflow run canary.yml --repo daijobudesu69/Crypto-RMF -f coin=ETH
+#
+# Tidak menulis state/ dan tidak menyentuh posisi RMF.
+on:
+  workflow_dispatch:
+    inputs:
+      coin:
+        description: "koin HYPE (harus tanpa posisi terbuka)"
+        type: choice
+        options: ["ETH", "BTC", "SOL", "HYPE"]
+        default: "ETH"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rmf-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Canary order HYPE
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Nama secret harus sama dengan execution.agent_secret (dicek tests/test_canary.py).
+          KEY_IN: ${{ secrets.HYPE_RMF_AGENT_KEY_66_CHAR }}
+          COIN: ${{ inputs.coin }}
+        run: |
+          # Kunci hanya untuk run_canary.py: dipindah ke variabel shell (tidak di-export).
+          key="${KEY_IN:-}"
+          unset KEY_IN
+          RMF_AGENT_KEY="$key" timeout -k 30 300 python run_canary.py "$COIN"
