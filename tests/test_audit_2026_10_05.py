@@ -226,8 +226,22 @@ def parts(mode, av, usdc, upnl):
 
 def test_f5_unified_ignores_perp_account_value():
     eq, how = live.equity_from_parts(parts("unifiedAccount", 37.0, 200.0, -3.0))
-    assert eq == 197.0 and "spot" in how
-    assert live.equity_from_parts(parts("portfolioMargin", 5.0, 100.0, 1.0))[0] == 101.0
+    assert eq == 200.0 and "spot" in how                 # spot sudah memuat uPnL
+    assert live.equity_from_parts(parts("portfolioMargin", 5.0, 100.0, 1.0))[0] == 100.0
+
+
+def test_f5_matches_real_canary_2026_10_05():
+    """Angka asli canary di akun RMF (0,11 HYPE @ 92,176, fee 0,004562 per sisi).
+    Saat posisi terbuka perp accountValue = margin (10,13925), dan spot USDC sudah
+    turun sebesar fee + |uPnL|. Ekuitas yang benar = spot saja."""
+    before = parts("unifiedAccount", 0.0, 127.521479, 0.0)
+    opened = parts("unifiedAccount", 10.13925, 127.516807, -0.00011)
+    after = parts("unifiedAccount", 0.0, 127.512245, 0.0)
+    fee = 0.004562
+    e0, e1, e2 = (live.equity_from_parts(x)[0] for x in (before, opened, after))
+    assert abs((e0 - e1) - (fee + 0.00011)) < 1e-9             # = fee + kerugian belum terealisasi
+    assert abs(e2 - (e0 - 2 * fee - 0.00011)) < 1e-9           # = closedPnl -0,00011
+    assert abs(e1 - 127.516807) < 1e-12
 
 
 def test_f5_standard_and_unknown_modes():

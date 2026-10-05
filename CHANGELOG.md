@@ -3,6 +3,18 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.6 — 2026-10-05
+
+Koreksi F5 (audit 2026-10-05) berdasarkan canary di akun RMF; strategi tidak berubah.
+- Ekuitas live mode unifiedAccount = saldo USDC spot SAJA. Terukur dengan posisi
+  terbuka (0,11 HYPE): spot USDC turun sebesar fee (userFills) + |uPnL|, dan saldo
+  akhir cocok sampai 6 desimal -> spot sudah memuat uPnL. Rumus rmf-0.1.2
+  (spot + uPnL) menghitung uPnL dua kali: saat rugi 30 USDC, ekuitas terbaca 60
+  USDC lebih rendah dan breaker DD bisa menyala di DD sungguhan ±20%.
+- Canary juga membuktikan perp accountValue saat posisi terbuka = margin (10,14),
+  bukan ekuitas: kode sebelum audit akan membaca ekuitas 10 USDC dan menyalakan
+  breaker. Perbaikan F5 tetap benar di bagian itu.
+
 ## rmf-0.1.5 — 2026-10-05
 
 Infrastruktur; aturan strategi tidak berubah.

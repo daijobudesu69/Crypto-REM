@@ -147,16 +147,21 @@ UNIFIED = ("unifiedAccount", "portfolioMargin")
 
 
 def equity_from_parts(p: dict) -> tuple[float, str]:
-    """Mode unified / portfolio margin: dokumentasi HYPE menyatakan semua saldo ada
-    di spot clearinghouse dan perp state "not meaningful", jadi perp accountValue
-    TIDAK dipakai walau > 0 (audit 2026-10-05 F5). Mode biasa: perp accountValue
-    (sudah termasuk uPnL). Mode tidak terbaca: cara lama (perp kalau > 0).
-    Belum diverifikasi dengan posisi terbuka: bandingkan dengan UI HYPE di hari
-    live pertama (tools/check_live.py mencetak semua komponennya)."""
+    """Ekuitas akun RMF (audit 2026-10-05 F5, dikoreksi dengan canary 2026-10-05).
+
+    Mode unified / portfolio margin: ekuitas = saldo USDC spot ("total") SAJA.
+    Diukur di akun RMF dengan posisi terbuka (canary 0,11 HYPE):
+      * perp accountValue = 10,13925 = margin posisi, BUKAN ekuitas -> tidak dipakai
+      * spot USDC turun 0,004672 = fee 0,004562 (userFills) + 0,00011 = -uPnL saat
+        itu, dan saldo akhir = awal - 2 fee + closedPnl tepat sampai 6 desimal
+        -> spot "total" SUDAH memuat uPnL; menambah uPnL lagi = dihitung dua kali.
+    Mode biasa: perp accountValue (sudah termasuk uPnL). Mode tidak terbaca: perp
+    kalau > 0, selain itu spot USDC.
+    """
     mode = p.get("abstraction")
     av = p["perp_account_value"]
     if mode in UNIFIED or (mode is None and av <= 0):
-        return p["spot_usdc"] + p["upnl"], f"spot USDC + uPnL ({mode or 'mode tidak terbaca'})"
+        return p["spot_usdc"], f"spot USDC, sudah termasuk uPnL ({mode or 'mode tidak terbaca'})"
     return av, f"perp accountValue ({mode or 'mode tidak terbaca'})"
 
 
