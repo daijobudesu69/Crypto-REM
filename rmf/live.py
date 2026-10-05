@@ -171,24 +171,32 @@ def _fill(st: dict) -> tuple[float, float]:
 
 
 def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, now: dt.datetime,
-                 attempt: int = 0, only_isolated=frozenset()) -> dict:
-    """Samakan posisi subaccount dengan aturan momentum hari ini.
+                 attempt: int = 0, only_isolated=frozenset(), owned=frozenset(), journal=None) -> dict:
+    """Samakan posisi akun RMF dengan aturan momentum hari ini.
 
-    mode: live (jual + beli) | manage (jual saja) | flatten (tutup semua)
+    mode: live (jual + beli) | manage (jual saja) | flatten (tutup posisi milik RMF)
     block_entries: True kalau circuit breaker DD aktif (beli ditahan).
     only_isolated: koin yang di HYPE hanya boleh isolated (dipasang isolated 1x).
+    owned: koin yang dibuka RMF sendiri (dari state). Posisi lain di akun = ASING:
+           live/manage berhenti (Halt) tanpa order, flatten hanya menutup milik RMF.
+           Akun ini dulu dipakai MEX; pengaman ini mencegah RMF menjual posisi MEX.
+    journal(coin): dipanggil SEBELUM tiap order beli, supaya koin itu tercatat milik
+           RMF walaupun job mati sebelum state hasil order tersimpan.
     """
     verify_agent(trader, cfg, now)
     ex = cfg.execution
     res = {"orders": [], "errors": [], "skipped": []}
     pos = trader.positions()
+    foreign = sorted(c for c in pos if c not in owned)
+    if foreign and mode != "flatten":
+        raise Halt(f"akun berisi posisi yang bukan dibuka RMF: {', '.join(foreign)}. Tutup/pindahkan dulu "
+                   "(mis. posisi MEX), RMF butuh akun khusus")
     mids = trader.mids()
     eq, how = trader.equity()
     res.update(equity_before=eq, equity_method=how)
-
-    shorts = [c for c, p in pos.items() if p["szi"] < 0]
-    for c in shorts:
-        res["errors"].append(f"{c}: posisi short di subaccount RMF (bukan dari bot) — tidak disentuh kecuali flatten")
+    if foreign:
+        res["errors"].append(f"posisi asing tidak disentuh: {', '.join(foreign)}")
+    pos = {c: p for c, p in pos.items() if c in owned}
     held = [c for c, p in pos.items() if p["szi"] > 0]
 
     if mode == "flatten":
@@ -231,6 +239,8 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
             try:
                 d = trader.sz_decimals(coin)
                 sz = mom.order_size(usd, mid, d, cfg.momentum.min_order_usdc)
+                if journal:
+                    journal(coin)
                 if coin in only_isolated:
                     lv = trader.set_leverage(coin, 1, False)
                 else:
@@ -251,7 +261,8 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
                                   "status": "filled" if fsz > 0 else "failed"})
     try:
         res["equity_after"], _ = trader.equity()
-        after = trader.positions()
+        bought = {o["coin"] for o in res["orders"] if o["side"] == "BUY"}
+        after = {c: p for c, p in trader.positions().items() if c in owned or c in bought}
         res["positions_after"] = {c: p["szi"] for c, p in after.items()}
         res["gross_after"] = sum(abs(p["szi"]) * mids.get(c, p["entry_px"]) for c, p in after.items())
     except Exception as e:  # noqa: BLE001

@@ -127,3 +127,26 @@ def test_flush_evaluates_requested_bar_even_if_newer_data(state_dir, cfg, world)
     out = jobs.run_flush(ctx_at(cfg, info, kl, now))
     assert out["bar"] == pd.Timestamp("2026-10-03 16:00", tz="UTC").isoformat()
     assert out["n_symbols"] == 12
+
+
+def test_live_owned_positions_persist_across_days(state_dir, cfg, world):
+    """Hari 1 live membeli 10 koin -> state mencatatnya -> hari 2 tidak dianggap asing."""
+    import dataclasses
+
+    from fakes import FakeTrader
+    info, kl = world
+    ex = dataclasses.replace(cfg.execution, master_address="0xM", account_address="0xM",
+                             agent_address="0xAGENT", agent_valid_until="2027-01-03")
+    lcfg = dataclasses.replace(cfg, execution=ex)
+    trader = FakeTrader(mids=info.all_mids())
+    d1 = dt.datetime(2026, 10, 4, 0, 12, tzinfo=dt.timezone.utc)
+    out = jobs.run_momentum(ctx_at(lcfg, info, kl, d1, momentum="live", factory=lambda: trader))
+    assert not out["live"]["errors"] and len(trader.pos) == 10
+    ls = store.load_json("momentum_live.json")
+    assert sorted(ls["positions"]) == sorted(trader.pos) and ls["pending"] == []
+    trader.pos["MEXCOIN"] = 1.0                       # posisi asing muncul (mis. MEX)
+    store.save_json("momentum_live.json", {**ls, "last_day": None})      # paksa siklus live berikutnya
+    d2 = d1 + dt.timedelta(minutes=10)
+    out2 = jobs.run_momentum(ctx_at(lcfg, info, kl, d2, momentum="live", factory=lambda: trader))
+    assert any("MEXCOIN" in e for e in out2["live"]["errors"])
+    assert "MEXCOIN" in trader.pos and len(trader.sent) == 10      # tidak ada order baru

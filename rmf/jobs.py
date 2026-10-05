@@ -233,7 +233,16 @@ def _live_day(ctx: Ctx, view: mom.View, exec_day: str, t: str) -> dict:
         dd = (eq_now / peak - 1) * 100 if peak > 0 else 0.0
         block = dd < -cfg.stop_rules.max_drawdown_pct
         only_iso = frozenset(c for c, m in ctx.meta().items() if m.get("onlyIsolated"))
-        r = live.run_momentum(view, cfg, trader, ctx.ctrl.momentum, block, ctx.now, attempt=n, only_isolated=only_iso)
+        owned = set(ls.get("positions") or {}) | set(ls.get("pending") or [])
+
+        def journal(coin):          # tulis dulu sebelum order: koin ini milik RMF
+            ls.setdefault("pending", [])
+            if coin not in ls["pending"]:
+                ls["pending"].append(coin)
+            store.save_json("momentum_live.json", ls)
+
+        r = live.run_momentum(view, cfg, trader, ctx.ctrl.momentum, block, ctx.now, attempt=n,
+                              only_isolated=only_iso, owned=frozenset(owned), journal=journal)
         res.update(r)
         res["dd_pct"], res["breaker"] = dd, block
         for o in r["orders"]:
@@ -241,7 +250,9 @@ def _live_day(ctx: Ctx, view: mom.View, exec_day: str, t: str) -> dict:
                                     "coin": o["coin"], "side": o["side"], "qty": o["qty"], "px": o["px"],
                                     "mid": o["mid"], "notional": o["qty"] * o["px"], "fee": "",
                                     "pnl": "", "reason": o["reason"], "status": o["status"]})
-        ls["positions"] = r.get("positions_after", {})
+        if "positions_after" in r:
+            ls["positions"] = {c: v for c, v in r["positions_after"].items() if c in owned or c in (ls.get("pending") or [])}
+            ls["pending"] = []
         ls["last_equity"] = r.get("equity_after", eq_now)
         ls["last_gross"] = r.get("gross_after")
         if ctx.ctrl.momentum == "flatten":
@@ -330,8 +341,12 @@ def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) 
     top = " ".join(c for c, r, _ in view.ranking[: cfg.momentum.n_hold])
     res = " ".join(c for c, r, _ in view.ranking[cfg.momentum.n_hold: cfg.momentum.exit_rank])
     t = pd.Timestamp(ctx.now).tz_convert("UTC").strftime("%Y-%m-%d %H:%M")
+    day_n = ""
+    if cfg.forward_start:
+        n = (pd.Timestamp(view.exec_day) - pd.Timestamp(cfg.forward_start)).days + 1
+        day_n = f" · hari ke-{n}"
     lines = [
-        "📊 <b>RMF forward test — momentum harian</b>",
+        f"📊 <b>RMF forward test — momentum harian{day_n}</b>",
         f"<code>{t} UTC · candle {view.last_close_day} · telat {out['delay_min']:.0f} menit</code>",
         "",
         f"  filter BTC: <b>{reg}</b> ({view.btc_close:,.0f} vs EMA50 {view.btc_ema:,.0f})",

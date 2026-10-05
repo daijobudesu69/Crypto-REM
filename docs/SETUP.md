@@ -89,36 +89,24 @@ gh secret set --repo daijobudesu69/Crypto-RMF GSHEET_SPREADSHEET_ID
 Tab yang ditulis: `equity`, `orders`, `flush_trades`, `flush_signals` (hanya event).
 Gagal menulis ke Sheets tidak pernah menggagalkan run.
 
-## 5. HYPE: subaccount + API wallet
+## 5. HYPE: akun + API wallet
 
-1. Di app HYPE buat **subaccount khusus RMF** (jangan subaccount MEX). Transfer
-   200 USDC ke sana.
-2. Buat **API wallet baru khusus RMF** (More → API) di akun utama, misalnya
-   bernama `RMF.bot`. Jangan memakai ulang API wallet MEX: nonce order dilacak per
-   API wallet, dan dua bot yang menandatangani dengan kunci yang sama bisa saling
-   menolak order. Simpan private key-nya. Masa berlaku maks 180 hari.
-3. Isi `config.yaml` → `execution` (alamat publik, aman di repo):
-   - `master_address`: akun utama
-   - `account_address`: subaccount RMF
-   - `agent_address`: alamat API wallet
-   - `agent_valid_until`: tanggal kedaluwarsa API wallet
-4. Simpan private key sebagai secret (66 karakter: `0x` + 64 hex, **bukan** alamat):
+Status 2026-10-05:
+- API wallet **RMF.bot** `0x855127eb9d86d715aae469c399c26d31ef85627c`, terpisah dari
+  MEX.bot, berlaku s/d 2027-01-03. Kuncinya di secret `HYPE_RMF_AGENT_KEY_66_CHAR`.
+- Akun RMF = akun utama `0x123bb2a1fe74395a57081d48077c28c9ca55a93b` (keputusan user).
+  MEX (live di-hold) pindah ke subaccount lain **sebelum** dinyalakan lagi.
+- Deposit sampai 200 USDC setelah 10 hari paper.
 
-```bash
-gh secret set --repo daijobudesu69/Crypto-RMF HYPE_RMF_AGENT_KEY_66_CHAR
-```
-
-5. Cek dari PC (hanya baca, tidak ada order). PowerShell:
-
-```powershell
-$env:RMF_AGENT_KEY = "0x..."; python tools/check_live.py; Remove-Item Env:RMF_AGENT_KEY
-```
-
-   Yang dicek: kunci cocok dengan `agent_address`, agent terdaftar dan belum
-   kedaluwarsa, ekuitas subaccount terbaca (dan metodenya: perp `accountValue`
-   atau saldo USDC spot untuk akun unified), posisi yang ada.
-6. Cek koin yang overlap dengan MEX (MEX live di 13 koin). Satu koin = satu posisi
-   per akun, tapi subaccount terpisah, jadi tidak saling menimpa.
+Aturan:
+- Akun RMF harus khusus RMF. Bot hanya menyentuh posisi yang dibukanya sendiri
+  (tercatat di `state/momentum_live.json`). Ada posisi lain (mis. MEX) = live
+  berhenti dengan alarm, tanpa order. `flatten` hanya menutup posisi milik RMF.
+- Ekuitas = seluruh saldo akun (mode unified: USDC spot + PnL). Ukuran order
+  ikut saldo itu, jadi isi akun hanya dengan modal RMF.
+- API wallet maks 180 hari. Sebelum kedaluwarsa: buat yang baru, ganti isi secret,
+  perbarui `agent_address` dan `agent_valid_until` di `config.yaml`.
+- Cek hanya-baca kapan saja dengan smoke test (di bawah).
 
 ## Smoke test (kapan saja)
 

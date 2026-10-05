@@ -200,4 +200,7 @@ Pola diambil dari Crypto-MEX (hanya referensi, tidak ada kode yang di-import): w
   - Leverage setting cross 1× (eksposur diatur ukuran order 0,5×).
   - Forward test mulai **2026-10-05 07:00 WIB** (`forward_start`), supaya entry pertama tepat di open harian.
 - **Repo:** https://github.com/daijobudesu69/Crypto-RMF (publik, menit Actions tidak dibatasi; isi `state/` bisa dibaca publik).
+- **Akun live (2026-10-05):** akun utama `0x123bb…a93b` dipakai RMF (MEX live di-hold, pindah ke subaccount lain sebelum aktif lagi). API wallet terpisah **RMF.bot** `0x855127…627c`, berlaku s/d 2027-01-03, secret `HYPE_RMF_AGENT_KEY_66_CHAR`. Pengaman: live hanya menyentuh posisi yang dibuka RMF; posisi asing = berhenti + alarm.
+- **Rencana user:** paper 10 hari dulu (hari ke-1 = 2026-10-05), lalu deposit sampai 200 USDC (saldo 2026-10-05: 127,52) dan user menyalakan `momentum: live` sendiri.
+- **Telegram & Sheets aktif** sejak 2026-10-05. Format pesan sementara mengikuti heartbeat MEX; format final dibahas nanti. Smoke test: `gh workflow run smoke.yml`.
 - **Belum ada:** flush live (butuh VPS lolos `fapi`), update artifact report.
