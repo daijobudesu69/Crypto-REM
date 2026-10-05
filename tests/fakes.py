@@ -65,8 +65,10 @@ class FakeInfo:
         return df[df["ts"] >= pd.Timestamp(start_ms, unit="ms", tz="UTC")].reset_index(drop=True)
 
     def funding_history(self, coin, start_ms, end_ms=None):
-        hours = max(0, int(((end_ms or start_ms) - start_ms) // 3_600_000))
-        return [(start_ms + h * 3_600_000, self.funding_rate) for h in range(hours)]
+        # seperti HYPE: satu funding per jam bulat di dalam [start, end]
+        end = end_ms or start_ms
+        first = -(-start_ms // 3_600_000) * 3_600_000
+        return [(t, self.funding_rate) for t in range(first, end + 1, 3_600_000)]
 
 
 class FakeKlines:

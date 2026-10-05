@@ -3,6 +3,20 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.1 — 2026-10-05
+
+Infrastruktur saja; aturan strategi tidak berubah.
+- Watcher bangun tepat 2m10s setelah close candle 4h (00:02:10 UTC = 07:02 WIB untuk
+  momentum), bukan menunggu jadwal 10 menit berikutnya. Hari ke-1: siklus 07:10,
+  pesan ±07:16 WIB.
+- Funding basket diambil SETELAH order dan pesan terkirim (basket hanya dipakai aturan
+  berhenti). Diukur dengan data asli: pesan terkirim 138 detik setelah siklus mulai,
+  pencatatan selesai di detik ke-326. Perkiraan pesan sampai ±07:04–07:05 WIB.
+  Kalau job mati di tengah, pencatatan dilanjutkan di siklus berikutnya.
+- Flush: sinyal dinilai di candle yang dimaksud walau data sudah memuat candle lebih baru.
+- Live: hanya menyentuh posisi yang dibuka RMF; akun = akun utama (keputusan user).
+- Pesan Telegram sementara memakai tata letak heartbeat MEX; smoke test (smoke.yml).
+
 ## rmf-0.1.0 — 2026-10-04
 
 - Infrastruktur bot: momentum harian (paper + live opsional) dan flush 4h (paper),

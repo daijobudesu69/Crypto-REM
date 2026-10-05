@@ -54,6 +54,7 @@ class Outbox:
     def __init__(self, now: dt.datetime | None = None):
         self.now = now or dt.datetime.now(dt.timezone.utc)
         self.items = store.load_json(OUTBOX, []) or []
+        self.sent: list = []
 
     def add(self, text: str) -> None:
         self.items.append({"time": self.now.isoformat(), "text": text})
@@ -68,6 +69,8 @@ class Outbox:
                 continue
             if keep or not send_now(it["text"]):
                 keep.append(it)           # urutan dijaga: berhenti di kegagalan pertama
+            else:
+                self.sent.append(it)
         self.items = keep
         store.save_json(OUTBOX, keep)
         return len(keep)

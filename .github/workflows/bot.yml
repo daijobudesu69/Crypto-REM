@@ -84,11 +84,22 @@ jobs:
             fi
             echo "::endgroup::"
             if [ "${MODE}" = "once" ]; then break; fi
-            if [ $(( $(date +%s) + INTERVAL )) -ge "$DEADLINE" ]; then
+            # Tidur sampai cek berikutnya: normalnya INTERVAL, tapi bangun TEPAT
+            # 2m10s setelah close candle 4h berikutnya (00/04/08/12/16/20 UTC;
+            # 00 UTC = candle harian = 07:00 WIB). Jeda 2 menit = run_after_minutes
+            # di config.yaml, +10 detik cadangan. Tanpa ini sinyal bisa telat
+            # sampai 10 menit (5 Okt: cek 07:00:16 terlalu cepat, berikutnya 07:10).
+            now=$(date +%s)
+            due=$(( now / 14400 * 14400 + 130 ))
+            if [ "$due" -le "$now" ]; then due=$(( due + 14400 )); fi
+            nap=$INTERVAL
+            if [ $(( due - now )) -lt "$nap" ]; then nap=$(( due - now )); fi
+            if [ $(( now + nap )) -ge "$DEADLINE" ]; then
               echo "[watch] anggaran waktu habis; cron berikutnya menyalakan ulang"
               break
             fi
-            sleep "$INTERVAL"
+            echo "[watch] cek berikutnya dalam ${nap}s"
+            sleep "$nap"
           done
           echo "[watch] selesai setelah ${n} siklus (exit ${worst})"
           exit "$worst"

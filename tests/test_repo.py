@@ -110,3 +110,27 @@ def test_no_secret_values_in_repo():
             if f.endswith((".py", ".yml", ".yaml", ".md", ".json", ".txt", ".sh")):
                 with open(os.path.join(d, f), encoding="utf-8", errors="ignore") as fh:
                     assert not pat.search(fh.read()), f"kemungkinan private key di {f}"
+
+
+def test_watcher_wakes_right_after_candle_close(cfg):
+    """Potongan bash watcher dijalankan dengan jam tiruan: bangun 2m10s setelah close 4h."""
+    import datetime as dt
+    import shutil
+    import subprocess
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash tidak ada")
+    body = wf("bot.yml")
+    snip = body[body.index("            now=$(date +%s)"):body.index('            if [ $(( now + nap )) -ge "$DEADLINE" ]')]
+    assert cfg.momentum.run_after_minutes * 60 < 130          # bangun setelah jeda run_after habis
+
+    def nap_at(hhmmss):
+        t = int(dt.datetime.fromisoformat(f"2026-10-05T{hhmmss}+00:00").timestamp())
+        script = "INTERVAL=600\n" + snip.replace("now=$(date +%s)", f"now={t}") + 'echo "$nap"\n'
+        return int(subprocess.run([bash, "-c", script], capture_output=True, text=True, check=True).stdout.strip())
+
+    assert nap_at("23:55:00") == 430        # -> 00:02:10 UTC (07:02:10 WIB), bukan 00:05
+    assert nap_at("00:00:16") == 114        # kasus 5 Okt: dulu menunggu sampai 00:10
+    assert nap_at("00:02:30") == 600        # sudah lewat: kembali ke interval 10 menit
+    assert nap_at("10:00:00") == 600
+    assert nap_at("11:57:00") == 310        # candle 4h 12:00 -> 12:02:10

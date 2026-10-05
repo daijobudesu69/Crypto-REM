@@ -39,6 +39,9 @@ class View:
     universe_size: int = 0
     bench_ret: float = 0.0        # return basket "beli semua koin" open(E-1) -> open(E), 1x
     bench_n: int = 0              # jumlah koin di basket
+    bench_gross: float = 0.0      # return basket sebelum funding
+    bench_coins: list = field(default_factory=list)   # anggota basket (funding diambil belakangan)
+    bench_net: bool = False       # True = bench_ret sudah dikurangi funding
 
     def ranks(self) -> dict:
         return {c: int(r) for c, r, _ in self.ranking}
@@ -210,7 +213,8 @@ def market_view(candles: dict, meta: dict, exec_day, cfg, funding: dict | None =
                 btc_close=btc_c, btc_ema=btc_e,
                 ranking=[(c, int(r), float(x)) for c, r, x in ranking[["coin", "rank", "ret"]].itertuples(index=False)],
                 universe_size=len(universe), bench_ret=bench_return(members, funding),
-                bench_n=len(members))
+                bench_n=len(members), bench_gross=bench_return(members, None),
+                bench_coins=sorted(members), bench_net=funding is not None)
 
 
 def rebalance(view: View, held: list, cfg) -> Rebalance:

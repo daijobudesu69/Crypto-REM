@@ -52,7 +52,9 @@ def test_momentum_day_once(state_dir, cfg, world):
     assert len([o for o in store.read("orders") if o["side"] == "BUY"]) == 10
     eq = store.read("equity")
     assert len(eq) == 1 and eq[0]["regime_on"] == "1"
-    assert any("momentum harian" in m["text"] for m in c.outbox.items)
+    # pesan harian langsung dikirim (bukan menunggu akhir siklus)
+    assert any("momentum harian" in m["text"] for m in c.outbox.sent)
+    assert store.load_json("momentum_paper.json").get("pending_record") is None
     # siklus berikutnya di hari yang sama: tidak ada apa-apa
     assert jobs.run_momentum(ctx_at(cfg, info, kl, now + dt.timedelta(minutes=10))) is None
     assert len(store.read("equity")) == 1
@@ -150,3 +152,51 @@ def test_live_owned_positions_persist_across_days(state_dir, cfg, world):
     out2 = jobs.run_momentum(ctx_at(lcfg, info, kl, d2, momentum="live", factory=lambda: trader))
     assert any("MEXCOIN" in e for e in out2["live"]["errors"])
     assert "MEXCOIN" in trader.pos and len(trader.sent) == 10      # tidak ada order baru
+
+
+
+def test_message_sent_before_basket_funding(state_dir, cfg, monkeypatch):
+    """Urutan: order -> pesan terkirim -> baru funding basket (±3 menit request)."""
+    c1d = universe_candles(end_day="2026-10-04")          # termasuk candle hari ini (open E)
+    info = FakeInfo(c1d, funding=0.0001)
+    kl = FakeKlines({})
+    order = []
+    monkeypatch.setattr(notify, "send_now", lambda text: order.append("pesan") or True)
+    real = info.funding_history
+
+    def fh(coin, start, end=None):
+        order.append("funding")
+        return real(coin, start, end)
+    monkeypatch.setattr(info, "funding_history", fh)
+    jobs.run_momentum(ctx_at(cfg, info, kl, dt.datetime(2026, 10, 4, 0, 3, tzinfo=dt.timezone.utc)))
+    # hari pertama belum ada posisi paper, jadi semua funding = funding basket
+    assert "pesan" in order and "funding" in order
+    assert order.index("pesan") < order.index("funding")
+    v = store.load_json("momentum_view.json")
+    assert v["bench_net"] and v["bench_n"] > 0
+    assert abs(v["bench_ret"] - (v["bench_gross"] - 0.0001 * 24)) < 1e-9   # 24 jam funding
+    row = store.read("equity")[-1]
+    assert abs(float(row["bench_ret"]) - v["bench_ret"]) < 1e-7    # CSV dibulatkan 8 desimal
+
+
+def test_pending_record_resumed_next_cycle(state_dir, cfg, world, monkeypatch):
+    """Job mati setelah pesan terkirim tapi sebelum log ditulis -> siklus berikutnya melanjutkan."""
+    info, kl = world
+    calls = {"n": 0}
+    real = jobs._record_day
+
+    def boom(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("runner mati")
+        return real(*a, **k)
+    monkeypatch.setattr(jobs, "_record_day", boom)
+    now = dt.datetime(2026, 10, 4, 0, 3, tzinfo=dt.timezone.utc)
+    with pytest.raises(RuntimeError):
+        jobs.run_momentum(ctx_at(cfg, info, kl, now))
+    assert store.read("equity") == [] and store.load_json("momentum_paper.json")["pending_record"]
+    n_orders = len(store.read("orders"))
+    out = jobs.run_momentum(ctx_at(cfg, info, kl, now + dt.timedelta(minutes=10)))
+    assert out is not None and len(store.read("equity")) == 1
+    assert len(store.read("orders")) == n_orders          # tidak trading ulang
+    assert store.load_json("momentum_paper.json").get("pending_record") is None

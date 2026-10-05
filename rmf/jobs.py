@@ -80,22 +80,30 @@ def fetch_view(ctx: Ctx, exec_day: pd.Timestamp) -> mom.View:
             failed.append(f"{c} ({type(e).__name__})")
     if failed:
         ctx.say(f"[momentum] candle gagal diambil: {', '.join(failed[:20])}")
-    funding = None
-    if cfg.benchmark.include_funding:
-        day = mom.naive_day(exec_day)
-        closed = mom.closed_only(candles, day - pd.Timedelta(days=1))
-        members = mom.bench_members(candles, mom.select_universe(closed, meta, cfg), day, cfg.momentum.min_history_days)
-        start = int(pd.Timestamp(day - pd.Timedelta(days=1), tz="UTC").value // 10**6)
-        end = start + DAY_MS - 1
-        funding, miss = {}, 0
-        for c in members:
-            try:
-                funding[c] = sum(r for _, r in ctx.info.funding_history(c, start, end))
-            except Exception:  # noqa: BLE001
-                miss += 1
-        if miss:
-            ctx.say(f"[momentum] funding basket gagal untuk {miss} koin (dianggap 0)")
-    return mom.market_view(candles, meta, exec_day, cfg, funding)
+    # Funding basket TIDAK diambil di sini: basket hanya dipakai aturan berhenti,
+    # jadi diambil setelah order dan pesan terkirim (_finish_bench).
+    return mom.market_view(candles, meta, exec_day, cfg, None)
+
+
+def _finish_bench(ctx: Ctx, view: mom.View) -> None:
+    """Kurangi funding riil dari return basket (definisi riset xsec_hl.py)."""
+    if view.bench_net or not ctx.cfg.benchmark.include_funding or not view.bench_coins:
+        view.bench_net = True
+        return
+    day = pd.Timestamp(view.exec_day)
+    start = int(pd.Timestamp(day - pd.Timedelta(days=1), tz="UTC").value // 10**6)
+    end = start + DAY_MS - 1
+    total, miss = 0.0, 0
+    for c in view.bench_coins:
+        try:
+            total += sum(r for _, r in ctx.info.funding_history(c, start, end))
+        except Exception:  # noqa: BLE001
+            miss += 1
+    if miss:
+        ctx.say(f"[momentum] funding basket gagal untuk {miss} koin (dianggap 0)")
+    view.bench_ret = view.bench_gross - total / len(view.bench_coins)
+    view.bench_net = True
+    store.save_json("momentum_view.json", view.to_dict())
 
 
 def _accrue_funding(ctx: Ctx, book: dict, mids: dict) -> float:
@@ -127,7 +135,7 @@ def momentum_due(ctx: Ctx) -> tuple[bool, bool, str]:
     if pd.Timestamp(now).tz_convert("UTC").tz_localize(None) < day + pd.Timedelta(minutes=cfg.momentum.run_after_minutes):
         return False, False, str(day.date())
     paper = store.load_json("momentum_paper.json") or {}
-    need_paper = paper.get("last_day") != str(day.date())
+    need_paper = paper.get("last_day") != str(day.date()) or bool(paper.get("pending_record"))
     need_live = False
     if ctx.ctrl.live:
         ls = store.load_json("momentum_live.json") or {}
@@ -156,16 +164,29 @@ def run_momentum(ctx: Ctx) -> dict | None:
     out = {"exec_day": exec_day, "view": view, "delay_min": delay, "paper": None, "live": None}
 
     paper = store.load_json("momentum_paper.json") or {"book": bk.new_book(cfg.capital_usdc), "bench_index": 1.0}
-    if need_paper:
+    trade_paper = need_paper and paper.get("last_day") != exec_day
+    if trade_paper:
         out["paper"] = _paper_day(ctx, paper, view, mids, t)
+        paper["pending_record"] = {"exec_day": exec_day, "time_utc": t, "equity": out["paper"]["equity"],
+                                   "gross": out["paper"]["gross"], "positions": len(out["paper"]["positions"]),
+                                   "delay_min": round(delay, 1)}
     if need_live:
         out["live"] = _live_day(ctx, view, exec_day, t)
 
-    if need_paper:
-        _record_day(ctx, paper, view, mids, out, t)
+    if trade_paper:
+        # Urutan sengaja: order tercatat -> pesan dikirim SEKARANG -> baru funding
+        # basket + log + aturan berhenti (±3 menit request ke HYPE).
         store.save_json("momentum_paper.json", paper)
+        ctx.outbox.add(daily_message(ctx, view, out, paper, mids))
+        ctx.outbox.flush()
     elif out["live"] is not None:
         ctx.outbox.add(_live_message(out["live"], ctx))
+    if paper.get("pending_record"):
+        vrec = view
+        if view.exec_day != paper["pending_record"]["exec_day"]:
+            vrec = mom.View.from_dict(store.load_json("momentum_view.json"))
+        out["stop"] = _record_day(ctx, paper, vrec, mids, out)
+        store.save_json("momentum_paper.json", paper)
     return out
 
 
@@ -200,10 +221,6 @@ def _paper_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, t: str) -> dic
                                 "pnl": f.get("net_pnl", 0.0), "reason": f["reason"], "status": "paper"})
     bk.mark(b, mids)
     paper["last_day"] = view.exec_day
-    # basket "beli semua koin" (1x, definisi riset): satu langkah per hari
-    if paper.get("bench_day") != view.exec_day:
-        paper["bench_index"] = float(paper.get("bench_index", 1.0)) * (1 + view.bench_ret)
-        paper["bench_day"] = view.exec_day
     return {"equity_before": eq0, "equity": bk.equity(b, mids), "gross": bk.gross(b, mids), "fills": fills,
             "warn": warn, "funding": funding, "positions": sorted(b["positions"]), "per_coin": usd,
             "skipped_buys": [c for c in rb.buys if c not in b["positions"]]}
@@ -268,31 +285,39 @@ def _live_day(ctx: Ctx, view: mom.View, exec_day: str, t: str) -> dict:
     return res
 
 
-def _record_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, out: dict, t: str) -> None:
+def _record_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, out: dict) -> dict:
+    """Setelah pesan terkirim: funding basket, baris equity/ranking, aturan berhenti.
+    Kalau job mati di tengah, pending_record membuat siklus berikutnya melanjutkan."""
     cfg = ctx.cfg
+    rec = paper["pending_record"]
     b = paper["book"]
-    p = out["paper"]
-    lv = out["live"] or {}
+    _finish_bench(ctx, view)
+    if paper.get("bench_day") != view.exec_day:          # basket 1x: satu langkah per hari
+        paper["bench_index"] = float(paper.get("bench_index", 1.0)) * (1 + view.bench_ret)
+        paper["bench_day"] = view.exec_day
+    lv = out.get("live") or {}
     ls = store.load_json("momentum_live.json") or {}
-    flush_state = store.load_json("flush_paper.json") or {}
-    fb = flush_state.get("book")
-    peak = float(b.get("peak_equity", p["equity"]))
+    fb = (store.load_json("flush_paper.json") or {}).get("book")
+    peak = float(b.get("peak_equity", rec["equity"]))
     store.append("equity", {
-        "exec_day": view.exec_day, "time_utc": t, "regime_on": view.regime_on, "btc_close": view.btc_close,
-        "btc_ema": view.btc_ema, "paper_equity": p["equity"], "paper_gross": p["gross"],
-        "paper_positions": len(p["positions"]),
+        "exec_day": view.exec_day, "time_utc": rec["time_utc"], "regime_on": view.regime_on,
+        "btc_close": view.btc_close, "btc_ema": view.btc_ema, "paper_equity": rec["equity"],
+        "paper_gross": rec["gross"], "paper_positions": rec["positions"],
         "live_equity": lv.get("equity_after", ls.get("last_equity")) if ctx.ctrl.live else "",
         "live_positions": len(ls.get("positions") or {}) if ctx.ctrl.live else "",
         "flush_equity": bk.equity(fb, mids) if fb else 0.0,
         "bench_ret": view.bench_ret, "bench_index": paper["bench_index"], "paper_peak": peak,
-        "paper_dd_pct": (p["equity"] / peak - 1) * 100 if peak else 0.0, "delay_min": round(out["delay_min"], 1),
+        "paper_dd_pct": (rec["equity"] / peak - 1) * 100 if peak else 0.0, "delay_min": rec["delay_min"],
         "live_gross": lv.get("gross_after", ls.get("last_gross")) if ctx.ctrl.live else ""})
     held_live = set((ls.get("positions") or {}).keys())
     for c, r, x in view.ranking[: max(20, cfg.momentum.exit_rank)]:
         store.append("ranking", {"exec_day": view.exec_day, "rank": r, "coin": c, "ret_14d_pct": round(x * 100, 2),
                                  "held_paper": c in b["positions"], "held_live": c in held_live}, mirror=False)
-    out["stop"] = _stop_rules(ctx, paper)
-    ctx.outbox.add(daily_message(ctx, view, out, paper, mids))
+    stop = _stop_rules(ctx, paper)
+    st = stop.get("paper")
+    paper["months_behind"] = st.months_behind_streak if st else 0
+    paper.pop("pending_record", None)
+    return stop
 
 
 def _stop_rules(ctx: Ctx, paper: dict) -> dict:
@@ -364,15 +389,17 @@ def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) 
         lines.append("  tidak ada perubahan posisi")
     for w in p["warn"]:
         lines.append("⚠️ " + notify.esc(w))
-    lines.append(f"  basket semua koin ({view.bench_n} koin, 1x): {view.bench_ret * 100:+.2f}% · "
-                 f"indeks {paper['bench_index']:.4f}")
+    if view.bench_net:
+        lines.append(f"  basket semua koin ({view.bench_n} koin, 1x): {view.bench_ret * 100:+.2f}%")
+    else:
+        lines.append(f"  basket semua koin ({view.bench_n} koin, 1x): {view.bench_gross * 100:+.2f}% "
+                     "(sebelum funding)")
     fs = store.load_json("flush_paper.json") or {}
     if fs.get("book"):
         fb = fs["book"]
         lines.append(f"  flush paper: {len(fb['positions'])} posisi · PnL {notify.usd(bk.equity(fb, mids))} USDC")
-    st = (out.get("stop") or {}).get("paper")
-    if st and st.months_behind_streak:
-        lines.append(f"  kalah dari basket {st.months_behind_streak} bulan berturut-turut "
+    if paper.get("months_behind"):
+        lines.append(f"  kalah dari basket {paper['months_behind']} bulan berturut-turut "
                      f"(batas {cfg.stop_rules.underperform_months})")
     if out["live"] is not None:
         lines += ["", _live_message(out["live"], ctx, short=True)]
