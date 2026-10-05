@@ -105,7 +105,7 @@ execution:
   master_address: ""
   account_address: ""
   agent_address: ""
-  agent_secret: HYPE_RMF_AGENT_KEY
+  agent_secret: HYPE_RMF_AGENT_KEY_66_CHAR
   agent_valid_until: ""       # YYYY-MM-DD, API wallet HYPE maks 180 hari
   margin_mode: cross          # JANGAN isolated 3-5x (crash 10 Okt 2025: median alt -65% intrabar)
   leverage: 1                 # eksposur diatur ukuran order (0,5x), bukan leverage

@@ -56,7 +56,7 @@ jobs:
           MODE: ${{ inputs.mode || 'loop' }}
           # Nama secret harus sama dengan execution.agent_secret di config.yaml
           # (dicek tests/test_repo.py). Kosong = live tidak bisa jalan, paper tetap.
-          AGENT_KEY_IN: ${{ secrets.HYPE_RMF_AGENT_KEY }}
+          AGENT_KEY_IN: ${{ secrets.HYPE_RMF_AGENT_KEY_66_CHAR }}
         run: |
           set -uo pipefail
           # Kunci API wallet hanya untuk run_cycle.py: dipindah ke variabel shell

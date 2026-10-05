@@ -58,7 +58,7 @@ def check_hype_key(cfg, now) -> tuple[list, str]:
     key = os.environ.get("RMF_AGENT_KEY", "").strip()
     src = os.environ.get("RMF_AGENT_KEY_SOURCE", "")
     if not key:
-        return [("HYPE API wallet", False, "secret HYPE_RMF_AGENT_KEY kosong")], ""
+        return [("HYPE API wallet", False, "secret HYPE_RMF_AGENT_KEY_66_CHAR kosong")], ""
     if not (key.startswith("0x") and len(key) == 66):
         return [("HYPE API wallet", False, f"panjang {len(key)}, harus 66 (0x + 64 hex) — "
                                             "mungkin yang diisi alamat, bukan private key")], ""

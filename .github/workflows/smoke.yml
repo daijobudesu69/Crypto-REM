@@ -27,15 +27,10 @@ jobs:
           GSHEET_WEBHOOK_URL: ${{ secrets.GSHEET_WEBHOOK_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GSHEET_SPREADSHEET_ID: ${{ secrets.GSHEET_SPREADSHEET_ID }}
-          KEY_RMF: ${{ secrets.HYPE_RMF_AGENT_KEY }}
-          # Sementara: secret yang diisi user memakai nama MEX. Dibaca hanya kalau
-          # HYPE_RMF_AGENT_KEY kosong, supaya kuncinya bisa dicek.
-          KEY_MEXNAME: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
+          KEY_RMF: ${{ secrets.HYPE_RMF_AGENT_KEY_66_CHAR }}
         run: |
           if [ -n "${KEY_RMF:-}" ]; then
-            export RMF_AGENT_KEY="$KEY_RMF" RMF_AGENT_KEY_SOURCE="HYPE_RMF_AGENT_KEY"
-          elif [ -n "${KEY_MEXNAME:-}" ]; then
-            export RMF_AGENT_KEY="$KEY_MEXNAME" RMF_AGENT_KEY_SOURCE="HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR"
+            export RMF_AGENT_KEY="$KEY_RMF" RMF_AGENT_KEY_SOURCE="HYPE_RMF_AGENT_KEY_66_CHAR"
           fi
-          unset KEY_RMF KEY_MEXNAME
+          unset KEY_RMF
           python tools/smoke_test.py

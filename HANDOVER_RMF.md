@@ -186,7 +186,7 @@ research/
 Pola diambil dari Crypto-MEX (hanya referensi, tidak ada kode yang di-import): watcher GitHub Actions, state di-commit ke `state/`, kontrol mode lewat file + workflow, watchdog, Telegram dengan outbox. Panduan: [docs/SETUP.md](docs/SETUP.md). Ringkasan: [README.md](README.md).
 
 - **Jalan di:** GitHub Actions (bukan PC rumah). HYPE API dan `data-api.binance.vision` terjangkau dari runner. `fapi.binance.com` tetap tidak (IP AS kena 451), jadi flush tetap paper dengan sinyal spot.
-- **Default aman:** `control/bot.yaml` = `momentum: paper`, `flush: paper`. Live hanya jalan kalau user mengganti ke `live` lewat `control.yml` **dan** secret `HYPE_RMF_AGENT_KEY` + alamat di `config.yaml` sudah diisi.
+- **Default aman:** `control/bot.yaml` = `momentum: paper`, `flush: paper`. Live hanya jalan kalau user mengganti ke `live` lewat `control.yml` **dan** secret `HYPE_RMF_AGENT_KEY_66_CHAR` + alamat di `config.yaml` sudah diisi.
 - **Menyusul dari user:** secret Telegram, Google Sheets (Apps Script atau service account), API wallet HYPE + subaccount RMF.
 - **Verifikasi yang sudah dilakukan:**
   - 53 tes offline lolos. Termasuk rotasi bot vs loop `hl_full.momentum_hl` hari demi hari (110 hari, rezim ON/OFF, koin listing baru): identik.

@@ -105,7 +105,7 @@ Gagal menulis ke Sheets tidak pernah menggagalkan run.
 4. Simpan private key sebagai secret (66 karakter: `0x` + 64 hex, **bukan** alamat):
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-RMF HYPE_RMF_AGENT_KEY
+gh secret set --repo daijobudesu69/Crypto-RMF HYPE_RMF_AGENT_KEY_66_CHAR
 ```
 
 5. Cek dari PC (hanya baca, tidak ada order). PowerShell:

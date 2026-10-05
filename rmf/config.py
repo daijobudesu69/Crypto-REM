@@ -91,7 +91,7 @@ class Execution:
     master_address: str = ""
     account_address: str = ""
     agent_address: str = ""
-    agent_secret: str = "HYPE_RMF_AGENT_KEY"
+    agent_secret: str = "HYPE_RMF_AGENT_KEY_66_CHAR"
     agent_valid_until: str = ""
     margin_mode: str = "cross"
     leverage: int = 1
