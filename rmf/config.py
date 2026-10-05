@@ -97,6 +97,7 @@ class Execution:
     leverage: int = 1
     ioc_slippage: float = 0.01
     max_live_attempts_per_day: int = 6
+    blocked_agents: tuple = ()
 
 
 @dataclass(frozen=True)

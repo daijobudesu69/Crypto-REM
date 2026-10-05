@@ -41,7 +41,11 @@ def main():
 
 
 def _k(ctx, sym, bar):
+    """Candle sampai `bar` saja, seperti jobs.run_flush: data boleh sudah memuat
+    candle yang lebih baru (audit 2026-10-05 F8)."""
     k = ctx.klines.klines(sym, "4h", 60)
+    if not k.empty:
+        k = k[pd.DatetimeIndex(k["ts"]) <= bar]
     return k if (not k.empty and pd.Timestamp(k["ts"].iloc[-1]) == bar) else None
 
 

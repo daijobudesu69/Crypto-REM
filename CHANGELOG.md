@@ -3,6 +3,24 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.2 — 2026-10-05
+
+Audit infrastruktur ([docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md)).
+Aturan strategi tidak berubah; Q1/Q2 (flush) menunggu keputusan pemilik.
+- F1: candle 1d koin yang gagal di-fetch tidak lagi membuat posisinya dijual;
+  siklus dicoba ulang sampai 03:00 UTC, lalu jalan dengan alarm.
+- F2: order beli live yang timeout tapi terisi tetap tercatat milik RMF (tidak HALT).
+- F3: pesan Telegram yang ditolak permanen (400) tidak menahan alarm di belakangnya.
+- F4: alarm 14 hari sebelum API wallet kedaluwarsa (RMF.bot: 2027-01-03).
+- F5: ekuitas live di mode unifiedAccount = spot USDC + uPnL (perp accountValue
+  diabaikan). Wajib dicocokkan dengan UI HYPE di hari live pertama.
+- F6: siklus terakhir watcher selalu selesai sebelum timeout job.
+- F7: catatan harian yang terputus diselesaikan sebelum hari baru.
+- F8: run_status.py --flush menilai bar yang diminta.
+- F9: actions/checkout@v5, actions/setup-python@v6 (Node 24).
+- Blokir MEX: `execution.blocked_agents` (MEX.bot) -> alarm harian selama masih
+  terdaftar di akun RMF. Crypto-MEX diblokir dari akun ini di repo MEX.
+
 ## rmf-0.1.1 — 2026-10-05
 
 Infrastruktur saja; aturan strategi tidak berubah.

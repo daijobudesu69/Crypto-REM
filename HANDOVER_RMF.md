@@ -204,3 +204,4 @@ Pola diambil dari Crypto-MEX (hanya referensi, tidak ada kode yang di-import): w
 - **Rencana user:** paper 10 hari dulu (hari ke-1 = 2026-10-05), lalu deposit sampai 200 USDC (saldo 2026-10-05: 127,52) dan user menyalakan `momentum: live` sendiri.
 - **Telegram & Sheets aktif** sejak 2026-10-05. Format pesan sementara mengikuti heartbeat MEX; format final dibahas nanti. Smoke test: `gh workflow run smoke.yml`.
 - **Belum ada:** flush live (butuh VPS lolos `fapi`), update artifact report.
+- **Audit infrastruktur 2026-10-05** (rmf-0.1.2): 8 perbaikan + blokir MEX, lihat [docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md). Tindakan user ada di §5 laporan itu (hapus MEX.bot, cek ekuitas hari live pertama, API wallet baru sebelum 2026-12-20, keputusan Q1/Q2).

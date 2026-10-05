@@ -117,3 +117,8 @@ execution:
   leverage: 1                 # eksposur diatur ukuran order (0,5x), bukan leverage
   ioc_slippage: 0.01          # order market = IOC limit 1% menembus mid
   max_live_attempts_per_day: 6
+  # API wallet bot lain yang TIDAK boleh terdaftar di akun RMF. Keputusan user
+  # 2026-10-05: MEX tidak memakai akun ini. Kalau masih terdaftar: alarm Telegram
+  # sekali sehari sampai dihapus di HYPE (menu API). Posisi yang bukan dibuka RMF
+  # tetap membuat live berhenti (Halt).
+  blocked_agents: ["0x329e707a50b77bd851d220d53efab0491960e797"]   # MEX.bot
