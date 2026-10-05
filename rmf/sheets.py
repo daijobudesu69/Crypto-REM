@@ -101,3 +101,32 @@ def append(tab: str, cols: list, row: dict) -> bool:
     except Exception as e:  # noqa: BLE001
         print(f"[sheets] gagal: {type(e).__name__}")
         return False
+
+
+def backfill(tab: str, cols: list, rows: list) -> str:
+    """Isi tab yang masih KOSONG (hanya header / belum ada) dengan semua baris CSV.
+
+    Tab yang sudah berisi data tidak disentuh, supaya tidak ada baris ganda.
+    Hanya untuk service account (webhook tidak bisa membaca isi tab).
+    """
+    if mode() != "service_account":
+        return "dilewati (bukan service account)"
+    try:
+        s = _sa_session()
+        sid = os.environ["GSHEET_SPREADSHEET_ID"].strip()
+        head = _sa_header(s, sid, tab, cols)
+        got = s.get(f"{API}/{sid}/values/{tab}!A:A", timeout=30)
+        got.raise_for_status()
+        n = len(got.json().get("values") or [])
+        if n > 1:
+            return f"sudah berisi {n - 1} baris, tidak diisi ulang"
+        if not rows:
+            return "header dibuat, belum ada baris"
+        vals = [["" if r.get(k) is None else r.get(k, "") for k in head] for r in rows]
+        r = s.post(f"{API}/{sid}/values/{tab}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
+                   json={"values": vals}, timeout=60)
+        if r.status_code >= 400:
+            return f"HTTP {r.status_code}" + (f" — bagikan spreadsheet ke {client_email()}" if r.status_code in (403, 404) else "")
+        return f"{len(rows)} baris diisi"
+    except Exception as e:  # noqa: BLE001
+        return f"gagal: {type(e).__name__}"

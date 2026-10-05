@@ -199,5 +199,5 @@ Pola diambil dari Crypto-MEX (hanya referensi, tidak ada kode yang di-import): w
   - Breaker DD > 40% di live: otomatis berhenti beli baru (jual tetap jalan). Aturan berhenti lain hanya alarm.
   - Leverage setting cross 1× (eksposur diatur ukuran order 0,5×).
   - Forward test mulai **2026-10-05 07:00 WIB** (`forward_start`), supaya entry pertama tepat di open harian.
-- **Repo:** https://github.com/daijobudesu69/Crypto-REM (publik, menit Actions tidak dibatasi; isi `state/` bisa dibaca publik).
+- **Repo:** https://github.com/daijobudesu69/Crypto-RMF (publik, menit Actions tidak dibatasi; isi `state/` bisa dibaca publik).
 - **Belum ada:** flush live (butuh VPS lolos `fapi`), update artifact report.

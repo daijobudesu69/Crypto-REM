@@ -17,7 +17,7 @@ secret-nya ada.
 
 ## 1. Repo GitHub
 
-Repo: **https://github.com/daijobudesu69/Crypto-REM** (publik). Publik dipilih supaya
+Repo: **https://github.com/daijobudesu69/Crypto-RMF** (publik). Publik dipilih supaya
 menit Actions tidak dibatasi (watcher nonstop ±4.500 menit/bulan; repo privat hanya
 dapat 2.000). Konsekuensinya: isi `state/` (ekuitas, posisi, order) bisa dibaca
 siapa saja. Secret tetap aman.
@@ -27,7 +27,7 @@ siapa saja. Secret tetap aman.
 - Cron menyalakan `RMF bot` otomatis. Untuk mulai segera:
 
 ```bash
-gh workflow run bot.yml --repo daijobudesu69/Crypto-REM -f mode=loop
+gh workflow run bot.yml --repo daijobudesu69/Crypto-RMF -f mode=loop
 ```
 
 - Forward test mulai `forward_start` di `config.yaml` (2026-10-05, 07:00 WIB).
@@ -52,11 +52,11 @@ python run_status.py --flush
 3. Simpan sebagai secret:
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM TELEGRAM_BOT_TOKEN
+gh secret set --repo daijobudesu69/Crypto-RMF TELEGRAM_BOT_TOKEN
 ```
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM TELEGRAM_CHAT_ID
+gh secret set --repo daijobudesu69/Crypto-RMF TELEGRAM_CHAT_ID
 ```
 
 Yang dikirim: ringkasan harian momentum (±07:02–07:15 WIB), event dan exit flush,
@@ -72,18 +72,18 @@ Apps Script → tempel `docs/apps_script.gs` → Deploy → New deployment → W
 Execute as: *Me*, Who has access: *Anyone* → salin URL.
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM GSHEET_WEBHOOK_URL
+gh secret set --repo daijobudesu69/Crypto-RMF GSHEET_WEBHOOK_URL
 ```
 
 **B. Service account.** Buat service account di Google Cloud, aktifkan Sheets API,
 unduh kunci JSON, bagikan spreadsheet ke `client_email` dengan akses Editor.
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM GOOGLE_SERVICE_ACCOUNT_JSON < key.json
+gh secret set --repo daijobudesu69/Crypto-RMF GOOGLE_SERVICE_ACCOUNT_JSON < key.json
 ```
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM GSHEET_SPREADSHEET_ID
+gh secret set --repo daijobudesu69/Crypto-RMF GSHEET_SPREADSHEET_ID
 ```
 
 Tab yang ditulis: `equity`, `orders`, `flush_trades`, `flush_signals` (hanya event).
@@ -93,8 +93,10 @@ Gagal menulis ke Sheets tidak pernah menggagalkan run.
 
 1. Di app HYPE buat **subaccount khusus RMF** (jangan subaccount MEX). Transfer
    200 USDC ke sana.
-2. Buat **API wallet** (More → API) di akun utama. Simpan private key-nya. Masa
-   berlaku maks 180 hari.
+2. Buat **API wallet baru khusus RMF** (More → API) di akun utama, misalnya
+   bernama `RMF.bot`. Jangan memakai ulang API wallet MEX: nonce order dilacak per
+   API wallet, dan dua bot yang menandatangani dengan kunci yang sama bisa saling
+   menolak order. Simpan private key-nya. Masa berlaku maks 180 hari.
 3. Isi `config.yaml` → `execution` (alamat publik, aman di repo):
    - `master_address`: akun utama
    - `account_address`: subaccount RMF
@@ -103,7 +105,7 @@ Gagal menulis ke Sheets tidak pernah menggagalkan run.
 4. Simpan private key sebagai secret (66 karakter: `0x` + 64 hex, **bukan** alamat):
 
 ```bash
-gh secret set --repo daijobudesu69/Crypto-REM HYPE_RMF_AGENT_KEY
+gh secret set --repo daijobudesu69/Crypto-RMF HYPE_RMF_AGENT_KEY
 ```
 
 5. Cek dari PC (hanya baca, tidak ada order). PowerShell:
@@ -118,10 +120,20 @@ $env:RMF_AGENT_KEY = "0x..."; python tools/check_live.py; Remove-Item Env:RMF_AG
 6. Cek koin yang overlap dengan MEX (MEX live di 13 koin). Satu koin = satu posisi
    per akun, tapi subaccount terpisah, jadi tidak saling menimpa.
 
+## Smoke test (kapan saja)
+
+Cek Telegram, Sheets (tab kosong diisi dari CSV), kunci API wallet HYPE (hanya
+baca: alamat agent, akun utama, masa berlaku, daftar subaccount), dan sumber
+data. Hasil dikirim ke Telegram. Tidak ada order.
+
+```bash
+gh workflow run smoke.yml --repo daijobudesu69/Crypto-RMF
+```
+
 ## 6. Menyalakan live (user sendiri)
 
 ```bash
-gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=live
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=live
 ```
 
 - Berlaku ≤ ~10 menit. Telegram mengonfirmasi "mode sekarang".
@@ -132,15 +144,15 @@ gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=live
 Rem dan pembatalan:
 
 ```bash
-gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=manage
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=manage
 ```
 
 ```bash
-gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=flatten
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=flatten
 ```
 
 ```bash
-gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=paper
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=paper
 ```
 
 - `manage`: tanpa beli baru, jual tetap sesuai aturan.
@@ -148,7 +160,7 @@ gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f momentum=paper
 - Breaker DD > 40%: live otomatis berhenti membeli. Reset (mis. setelah deposit/withdraw):
 
 ```bash
-gh workflow run control.yml --repo daijobudesu69/Crypto-REM -f reset_breaker=true
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f reset_breaker=true
 ```
 
 ## Flush dengan sinyal futures (opsional, butuh VPS)

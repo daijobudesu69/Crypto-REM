@@ -52,7 +52,7 @@ def test_momentum_day_once(state_dir, cfg, world):
     assert len([o for o in store.read("orders") if o["side"] == "BUY"]) == 10
     eq = store.read("equity")
     assert len(eq) == 1 and eq[0]["regime_on"] == "1"
-    assert any("RMF momentum" in m["text"] for m in c.outbox.items)
+    assert any("momentum harian" in m["text"] for m in c.outbox.items)
     # siklus berikutnya di hari yang sama: tidak ada apa-apa
     assert jobs.run_momentum(ctx_at(cfg, info, kl, now + dt.timedelta(minutes=10))) is None
     assert len(store.read("equity")) == 1
@@ -113,3 +113,17 @@ def test_nothing_before_forward_start(state_dir, cfg, world):
     assert jobs.run_momentum(ctx_at(late, info, kl, now)) is None
     assert jobs.run_flush(ctx_at(late, info, kl, now)) is None
     assert store.read("orders") == []
+
+
+def test_flush_evaluates_requested_bar_even_if_newer_data(state_dir, cfg, world):
+    """Run 00:00:16 UTC (jeda 2 menit belum habis) -> bar = 16:00, tapi data sudah
+    memuat candle 20:00. Sinyal harus dinilai di 16:00, bukan dibuang (0 simbol)."""
+    info, kl = world
+    for s, df in kl.frames.items():
+        nxt = df.iloc[[-1]].copy()
+        nxt["ts"] = nxt["ts"] + pd.Timedelta(hours=4)
+        kl.frames[s] = pd.concat([df, nxt], ignore_index=True)
+    now = dt.datetime(2026, 10, 4, 0, 0, 16, tzinfo=dt.timezone.utc)
+    out = jobs.run_flush(ctx_at(cfg, info, kl, now))
+    assert out["bar"] == pd.Timestamp("2026-10-03 16:00", tz="UTC").isoformat()
+    assert out["n_symbols"] == 12

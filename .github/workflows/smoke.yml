@@ -1,0 +1,41 @@
+name: RMF smoke test
+
+# Manual saja. Cek Telegram, Google Sheets (isi tab kosong dari CSV), kunci API
+# wallet HYPE (hanya baca, tanpa order), dan sumber data. Hasil ke Telegram.
+#   gh workflow run smoke.yml --repo daijobudesu69/Crypto-RMF
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Smoke test
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GSHEET_WEBHOOK_URL: ${{ secrets.GSHEET_WEBHOOK_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GSHEET_SPREADSHEET_ID: ${{ secrets.GSHEET_SPREADSHEET_ID }}
+          KEY_RMF: ${{ secrets.HYPE_RMF_AGENT_KEY }}
+          # Sementara: secret yang diisi user memakai nama MEX. Dibaca hanya kalau
+          # HYPE_RMF_AGENT_KEY kosong, supaya kuncinya bisa dicek.
+          KEY_MEXNAME: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
+        run: |
+          if [ -n "${KEY_RMF:-}" ]; then
+            export RMF_AGENT_KEY="$KEY_RMF" RMF_AGENT_KEY_SOURCE="HYPE_RMF_AGENT_KEY"
+          elif [ -n "${KEY_MEXNAME:-}" ]; then
+            export RMF_AGENT_KEY="$KEY_MEXNAME" RMF_AGENT_KEY_SOURCE="HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR"
+          fi
+          unset KEY_RMF KEY_MEXNAME
+          python tools/smoke_test.py

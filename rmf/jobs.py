@@ -316,50 +316,78 @@ def _stop_rules(ctx: Ctx, paper: dict) -> dict:
 
 
 def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) -> str:
+    """Ringkasan harian, tata letak mengikuti heartbeat Crypto-MEX (sementara,
+    format final RMF dibahas nanti)."""
     cfg = ctx.cfg
     p = out["paper"]
     b = paper["book"]
     peak = float(b.get("peak_equity", p["equity"]))
     dd = (p["equity"] / peak - 1) * 100 if peak else 0
-    reg = "ON ✅" if view.regime_on else "OFF ⛔ (semua dijual, cash)"
+    ret = (p["equity"] / float(b.get("start_capital", cfg.capital_usdc)) - 1) * 100
+    reg = "ON" if view.regime_on else "OFF (semua dijual, cash)"
     sells = [f"{f['coin']} ({f['reason']}, {f.get('net_pnl', 0):+.2f})" for f in p["fills"] if f["side"] == "SELL"]
     buys = [f["coin"] for f in p["fills"] if f["side"] == "BUY"]
     top = " ".join(c for c, r, _ in view.ranking[: cfg.momentum.n_hold])
     res = " ".join(c for c, r, _ in view.ranking[cfg.momentum.n_hold: cfg.momentum.exit_rank])
+    t = pd.Timestamp(ctx.now).tz_convert("UTC").strftime("%Y-%m-%d %H:%M")
     lines = [
-        f"📊 <b>RMF momentum — {notify.wib(ctx.now)}</b>",
-        f"<code>candle 1d {view.last_close_day} · telat {out['delay_min']:.0f} menit</code>",
+        "📊 <b>RMF forward test — momentum harian</b>",
+        f"<code>{t} UTC · candle {view.last_close_day} · telat {out['delay_min']:.0f} menit</code>",
         "",
-        f"Filter BTC: <b>{reg}</b>  ({view.btc_close:,.0f} vs EMA50 {view.btc_ema:,.0f})",
-        f"Top {cfg.momentum.n_hold}: {notify.esc(top) or '-'}",
-        f"Cadangan {cfg.momentum.n_hold + 1}–{cfg.momentum.exit_rank}: {notify.esc(res) or '-'}",
+        f"  filter BTC: <b>{reg}</b> ({view.btc_close:,.0f} vs EMA50 {view.btc_ema:,.0f})",
+        f"  top {cfg.momentum.n_hold}: {notify.esc(top) or '-'}",
+        f"  cadangan {cfg.momentum.n_hold + 1}–{cfg.momentum.exit_rank}: {notify.esc(res) or '-'}",
         "",
-        f"<b>Paper</b>: ekuitas {notify.usd(p['equity'])} USDC (DD {dd:+.1f}%) · {len(p['positions'])} posisi"
-        f" · gross {notify.usd(p['gross'])} · {notify.usd(p['per_coin'])}/koin",
+        f"  paper: <b>{notify.usd(p['equity'])} USDC</b> ({ret:+.2f}% sejak mulai · DD {dd:+.1f}%)",
+        f"  posisi: {len(p['positions'])} · gross {notify.usd(p['gross'])} · {notify.usd(p['per_coin'])}/koin",
     ]
     if sells:
-        lines.append("Jual: " + notify.esc("; ".join(sells)))
+        lines.append("  jual: " + notify.esc("; ".join(sells)))
     if buys:
-        lines.append("Beli: " + notify.esc(", ".join(buys)))
+        lines.append("  beli: " + notify.esc(", ".join(buys)))
     if not sells and not buys:
-        lines.append("Tidak ada perubahan posisi.")
+        lines.append("  tidak ada perubahan posisi")
     for w in p["warn"]:
         lines.append("⚠️ " + notify.esc(w))
-    lines.append(f"Basket semua koin ({view.bench_n} koin, 1x): indeks {paper['bench_index']:.4f} "
-                 f"({view.bench_ret * 100:+.2f}% open kemarin -> open hari ini)")
-    if out["live"] is not None:
-        lines += ["", _live_message(out["live"], ctx, short=True)]
-    else:
-        lines.append(f"Live: mode <b>{ctx.ctrl.momentum}</b>")
-    st = (out.get("stop") or {}).get("paper")
-    if st and st.months_behind_streak:
-        lines.append(f"Kalah dari basket {st.months_behind_streak} bulan berturut-turut "
-                     f"(batas {cfg.stop_rules.underperform_months}).")
+    lines.append(f"  basket semua koin ({view.bench_n} koin, 1x): {view.bench_ret * 100:+.2f}% · "
+                 f"indeks {paper['bench_index']:.4f}")
     fs = store.load_json("flush_paper.json") or {}
     if fs.get("book"):
         fb = fs["book"]
-        lines.append(f"Flush paper: {len(fb['positions'])} posisi · PnL total {notify.usd(bk.equity(fb, mids))} USDC")
+        lines.append(f"  flush paper: {len(fb['positions'])} posisi · PnL {notify.usd(bk.equity(fb, mids))} USDC")
+    st = (out.get("stop") or {}).get("paper")
+    if st and st.months_behind_streak:
+        lines.append(f"  kalah dari basket {st.months_behind_streak} bulan berturut-turut "
+                     f"(batas {cfg.stop_rules.underperform_months})")
+    if out["live"] is not None:
+        lines += ["", _live_message(out["live"], ctx, short=True)]
+    else:
+        lines.append(f"  live: mode <b>{ctx.ctrl.momentum}</b>")
+    lines += ["", "<i>Pesan ini muncul 1× sehari setelah candle harian close (07:00 WIB). "
+                  "Event flush dan alarm dikirim terpisah, hanya kalau ada.</i>"]
     return "\n".join(lines)
+
+
+def daily_message_from_state(ctx: Ctx) -> str | None:
+    """Bangun ulang ringkasan harian terakhir dari state/ (untuk kirim ulang / smoke test)."""
+    vdoc = store.load_json("momentum_view.json")
+    paper = store.load_json("momentum_paper.json")
+    eq = [r for r in store.read("equity") if vdoc and r["exec_day"] == vdoc["exec_day"]]
+    if not (vdoc and paper and eq):
+        return None
+    view, row = mom.View.from_dict(vdoc), eq[-1]
+    fills = [{"coin": o["coin"], "side": o["side"], "reason": o["reason"], "net_pnl": float(o["pnl"] or 0)}
+             for o in store.read("orders")
+             if o["book"] == "paper" and o["strategy"] == "momentum" and o["exec_day"] == view.exec_day]
+    equity = float(row["paper_equity"])
+    out = {"delay_min": float(row["delay_min"] or 0), "live": None, "paper": {
+        "equity": equity, "gross": float(row["paper_gross"]), "fills": fills, "warn": [],
+        "positions": list(paper["book"]["positions"]), "per_coin": mom.per_coin_usd(equity, ctx.cfg)}}
+    saved_now, ctx.now = ctx.now, dt.datetime.fromisoformat(row["time_utc"])
+    try:
+        return daily_message(ctx, view, out, paper, {})
+    finally:
+        ctx.now = saved_now
 
 
 def _live_message(lv: dict, ctx: Ctx, short: bool = False) -> str:
@@ -411,6 +439,10 @@ def run_flush(ctx: Ctx) -> dict | None:
         except Exception as e:  # noqa: BLE001
             ctx.say(f"[flush] {sym} gagal ({type(e).__name__})")
             continue
+        # Data bisa sudah memuat candle yang lebih baru dari `bar` (mis. run tepat
+        # setelah close, sebelum jeda run_after habis): nilai sinyal DI bar itu.
+        if not k.empty:
+            k = k[pd.DatetimeIndex(k["ts"]) <= bar]
         if k.empty or pd.Timestamp(k["ts"].iloc[-1]) != bar:
             continue
         n_sym += 1

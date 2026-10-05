@@ -18,4 +18,4 @@ dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
     639 jendela 6 bulan simulasi HYPE momentum 200 USDC (simulasi 200 -> 313,7,
     diulang dan cocok persis). Terburuk −19,2%, median +3,8%, 42,6% jendela negatif.
 - Forward test mulai 2026-10-05 00:00 UTC (07:00 WIB).
-- Repo: github.com/daijobudesu69/Crypto-REM (publik).
+- Repo: github.com/daijobudesu69/Crypto-RMF (publik).
