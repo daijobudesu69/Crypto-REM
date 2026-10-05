@@ -3,6 +3,7 @@
     python tools/set_control.py --momentum live
     python tools/set_control.py --flush off
     python tools/set_control.py --reset-breaker
+    python tools/set_control.py --resume          # lepas status TAHAN
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ def main() -> int:
     ap.add_argument("--momentum", default="tetap")
     ap.add_argument("--flush", default="tetap")
     ap.add_argument("--reset-breaker", action="store_true")
+    ap.add_argument("--resume", action="store_true")
     a = ap.parse_args()
     cur = control.read((control.PATH,))
     m = cur.momentum if a.momentum == "tetap" else a.momentum
@@ -28,11 +30,14 @@ def main() -> int:
     if m not in control.MOMENTUM_MODES or f not in control.FLUSH_MODES:
         print(f"[control] mode tidak dikenal: momentum={m} flush={f}")
         return 2
-    reset = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ") if a.reset_breaker else cur.breaker_reset
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    reset = stamp if a.reset_breaker else cur.breaker_reset
+    resume = stamp if a.resume else cur.resume
     os.makedirs(os.path.dirname(control.PATH), exist_ok=True)
     with open(control.PATH, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(control.render(m, f, reset))
-    print(f"[control] momentum={m} flush={f}" + (" breaker direset" if a.reset_breaker else ""))
+        fh.write(control.render(m, f, reset, resume))
+    print(f"[control] momentum={m} flush={f}" + (" breaker direset" if a.reset_breaker else "")
+          + (" TAHAN dilepas" if a.resume else ""))
     return 0
 
 

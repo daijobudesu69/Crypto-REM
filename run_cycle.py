@@ -49,6 +49,13 @@ def main(now: dt.datetime | None = None) -> int:
                    now=now, trader_factory=factory)
 
     _account_checks(ctx)
+    if ctrl.live:
+        # Posisi RMF ditutup di luar bot -> TAHAN + Telegram saat itu juga. Gagal baca
+        # tidak menggagalkan siklus; dicoba lagi di siklus berikutnya.
+        try:
+            jobs.watch_external_close(ctx)
+        except Exception as e:  # noqa: BLE001
+            print(f"[cycle] cek posisi luar bot gagal ({type(e).__name__})")
 
     res = {}
     for name, fn in (("momentum", jobs.run_momentum), ("flush", jobs.run_flush)):

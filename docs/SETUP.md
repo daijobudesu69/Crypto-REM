@@ -151,6 +151,26 @@ gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=paper
 gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f reset_breaker=true
 ```
 
+### Status TAHAN (posisi ditutup di luar bot)
+
+Selama mode live/manage/flatten, setiap siklus (±10 menit) bot membandingkan posisi
+akun dengan catatan posisi RMF. Kalau ada posisi RMF yang hilang atau mengecil
+padahal bot tidak menjualnya (tutup manual, likuidasi, ADL, delisting):
+
+- Telegram langsung dikirim: "🛑 RMF — posisi ditutup di luar bot".
+- Bot **tidak membeli apa pun** sampai diaktifkan kembali, termasuk di siklus harian.
+- Sisa posisi RMF tetap dijual sesuai aturan (peringkat > 15, filter BTC OFF).
+- Buku paper tetap jalan seperti biasa (pembanding: "kalau tidak diintervensi").
+
+Intervensi darurat jadi cukup: tutup posisi di aplikasi HYPE. Tidak perlu mengubah
+mode. Aktifkan kembali (pembelian normal mulai siklus harian berikutnya):
+
+```bash
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f resume=true
+```
+
+Dari HP: Actions → RMF control → Run workflow → centang `resume`.
+
 ## Flush dengan sinyal futures (opsional, butuh VPS)
 
 Sinyal terbaik (+0,18R per event) butuh candle futures Binance. `fapi.binance.com`

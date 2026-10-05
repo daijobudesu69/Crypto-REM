@@ -196,11 +196,13 @@ def _fill(st: dict) -> tuple[float, float]:
 
 
 def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, now: dt.datetime,
-                 attempt: int = 0, only_isolated=frozenset(), owned=frozenset(), journal=None) -> dict:
+                 attempt: int = 0, only_isolated=frozenset(), owned=frozenset(), journal=None,
+                 block_reason: str = "breaker DD aktif") -> dict:
     """Samakan posisi akun RMF dengan aturan momentum hari ini.
 
     mode: live (jual + beli) | manage (jual saja) | flatten (tutup posisi milik RMF)
-    block_entries: True kalau circuit breaker DD aktif (beli ditahan).
+    block_entries: True kalau beli ditahan (breaker DD, atau status TAHAN); alasannya
+           di block_reason. Jual sesuai aturan tetap jalan.
     only_isolated: koin yang di HYPE hanya boleh isolated (dipasang isolated 1x).
     owned: koin yang dibuka RMF sendiri (dari state). Posisi lain di akun = ASING:
            live/manage berhenti (Halt) tanpa order, flatten hanya menutup milik RMF.
@@ -232,7 +234,7 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
         sells = rb.sells
         buys = rb.buys if (mode == "live" and not block_entries) else []
         if rb.buys and not buys:
-            res["skipped"] = [(c, "breaker DD aktif" if block_entries else f"mode {mode}") for c in rb.buys]
+            res["skipped"] = [(c, block_reason if block_entries else f"mode {mode}") for c in rb.buys]
 
     for coin, why in sells:
         p = pos[coin]

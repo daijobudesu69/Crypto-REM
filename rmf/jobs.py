@@ -285,7 +285,10 @@ def _live_day(ctx: Ctx, view: mom.View, exec_day: str, t: str) -> dict:
         peak = max(float(ls.get("peak_equity") or 0), eq_now)
         ls["peak_equity"] = peak
         dd = (eq_now / peak - 1) * 100 if peak > 0 else 0.0
-        block = dd < -cfg.stop_rules.max_drawdown_pct
+        breaker = dd < -cfg.stop_rules.max_drawdown_pct
+        hold = ls.get("hold")
+        block = breaker or bool(hold)
+        why = "TAHAN: posisi ditutup di luar bot" if hold else "breaker DD aktif"
         only_iso = frozenset(c for c, m in ctx.meta().items() if m.get("onlyIsolated"))
         owned = set(ls.get("positions") or {}) | set(ls.get("pending") or [])
 
@@ -296,9 +299,10 @@ def _live_day(ctx: Ctx, view: mom.View, exec_day: str, t: str) -> dict:
             store.save_json("momentum_live.json", ls)
 
         r = live.run_momentum(view, cfg, trader, ctx.ctrl.momentum, block, ctx.now, attempt=n,
-                              only_isolated=only_iso, owned=frozenset(owned), journal=journal)
+                              only_isolated=only_iso, owned=frozenset(owned), journal=journal,
+                              block_reason=why)
         res.update(r)
-        res["dd_pct"], res["breaker"] = dd, block
+        res["dd_pct"], res["breaker"], res["hold"] = dd, breaker, hold
         for o in r["orders"]:
             store.append("orders", {"time_utc": t, "book": "live", "strategy": "momentum", "exec_day": exec_day,
                                     "coin": o["coin"], "side": o["side"], "qty": o["qty"], "px": o["px"],
@@ -473,6 +477,9 @@ def _live_message(lv: dict, ctx: Ctx, short: bool = False) -> str:
     head = "" if short else f"🤖 <b>RMF live — {notify.wib(ctx.now)}</b>\n"
     s = (f"{head}<b>Live</b> ({lv.get('mode')}): ekuitas {notify.usd(lv.get('equity_after'))} USDC"
          f" · DD {lv.get('dd_pct', 0):+.1f}% · {len(lv.get('orders', []))} order")
+    if lv.get("hold"):
+        s += ("\n🛑 TAHAN aktif sejak " + notify.wib(lv["hold"]["since"]) + ": tidak ada pembelian, jual sesuai "
+              "aturan tetap jalan (aktifkan kembali: control.yml -f resume=true)")
     if lv.get("breaker"):
         s += f"\n🛑 Breaker DD aktif: beli baru ditahan (reset: control.yml -f reset_breaker=true)"
     for o in lv.get("orders", []):
@@ -643,6 +650,64 @@ def _flush_event(ctx: Ctx, st: dict, bar: pd.Timestamp, sig: list, out: dict, t:
     if rej:
         lines.append("Ditolak: " + notify.esc("; ".join(f"{c}: {w}" for c, w in rej)))
     ctx.outbox.add("\n".join(lines))
+
+
+# =========================================================================== #
+#  TAHAN: posisi RMF ditutup di luar bot (manual, likuidasi, ADL, delisting)
+# =========================================================================== #
+def watch_external_close(ctx: Ctx) -> dict | None:
+    """Dipanggil SETIAP siklus selama mode live/manage/flatten, sebelum job momentum.
+
+    Membandingkan posisi akun (hanya baca, tanpa kunci) dengan catatan posisi
+    RMF di momentum_live.json. Posisi RMF yang hilang/mengecil padahal bot tidak
+    menjualnya = ditutup di luar bot -> status TAHAN: tidak ada pembelian sampai
+    pemilik mengaktifkan kembali (control.yml -f resume=true); jual sesuai aturan
+    tetap jalan. Telegram dikirim SAAT ITU JUGA. Keputusan pemilik 2026-10-05.
+    """
+    ls = store.load_json("momentum_live.json")
+    if ls is None:
+        return None
+    changed = False
+    # Lepas TAHAN: nilai resume BARU di control/bot.yaml (pola sama dengan breaker_reset).
+    if ctx.ctrl.resume and ctx.ctrl.resume != ls.get("resume_seen"):
+        ls["resume_seen"] = ctx.ctrl.resume
+        if ls.pop("hold", None):
+            ctx.outbox.add("▶️ <b>RMF — TAHAN dilepas</b>\nPembelian normal lagi mulai siklus harian "
+                           "berikutnya (±07:02 WIB).")
+        changed = True
+    rec = {c: float(v) for c, v in (ls.get("positions") or {}).items() if float(v) > 0}
+    acct = ctx.cfg.execution.account_address
+    if rec and acct:
+        st = ctx.info.clearinghouse(acct)
+        actual = {ap["position"]["coin"]: float(ap["position"]["szi"]) for ap in st.get("assetPositions", [])}
+        gone = {}
+        for c, want in rec.items():
+            have = max(actual.get(c, 0.0), 0.0)
+            if have < want * (1 - 1e-6):
+                gone[c] = (want, have)
+        if gone:
+            for c, (_, have) in gone.items():
+                if have > 0:
+                    ls["positions"][c] = have
+                else:
+                    ls["positions"].pop(c, None)
+            now = ctx.now.isoformat(timespec="seconds")
+            hold = ls.get("hold") or {"since": now, "coins": {}}
+            for c, (want, have) in gone.items():
+                hold["coins"][c] = {"tercatat": want, "sekarang": have, "waktu": now}
+            ls["hold"] = hold
+            changed = True
+            lines = ", ".join(f"{notify.esc(c)} ({'tutup penuh' if h == 0 else f'{w:g} → {h:g}'})"
+                              for c, (w, h) in sorted(gone.items()))
+            ctx.outbox.add(f"🛑 <b>RMF — posisi ditutup di luar bot</b>\n{lines}\n\n"
+                           "Status <b>TAHAN</b>: bot TIDAK membeli apa pun sampai kamu aktifkan kembali. "
+                           "Sisa posisi RMF tetap dijual sesuai aturan.\n"
+                           "Penyebab bisa: tutup manual, likuidasi, ADL, atau delisting.\n"
+                           "<i>Aktifkan kembali: gh workflow run control.yml -f resume=true</i>")
+    if changed:
+        store.save_json("momentum_live.json", ls)
+        ctx.outbox.flush()                       # kirim sekarang, bukan di akhir siklus
+    return ls.get("hold")
 
 
 def agent_key() -> str:
