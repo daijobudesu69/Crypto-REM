@@ -60,6 +60,10 @@ class FakeInfo:
         self.calls["candles"] += 1
         src = self.c1d if interval == "1d" else self.c4h
         df = src.get(coin)
+        if df is None and interval == "1d":
+            # seperti HYPE: koin tanpa candle -> [] (bukan error). Error jaringan
+            # disimulasikan terpisah (tests/test_audit_2026_10_05.py).
+            return pd.DataFrame(columns=["ts", "open", "high", "low", "close", "volume"])
         if df is None:
             raise RuntimeError("no data")
         return df[df["ts"] >= pd.Timestamp(start_ms, unit="ms", tz="UTC")].reset_index(drop=True)

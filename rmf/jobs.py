@@ -23,6 +23,15 @@ from .config import path_in_repo
 
 DAY_MS = 86_400_000
 H4 = pd.Timedelta(hours=4)
+# Kalau candle 1d sebagian koin gagal diambil, siklus momentum dibatalkan dan
+# dicoba ulang (~10 menit) sampai jam ini (UTC). Tanpa ini koin yang gagal
+# dianggap "tidak eligible": posisi koin itu dijual dan peringkat lain bergeser,
+# hal yang tidak mungkin terjadi di riset (audit 2026-10-05 F1).
+FETCH_RETRY_UNTIL_H = 3          # 03:00 UTC = 10:00 WIB
+
+
+class DataIncomplete(RuntimeError):
+    """Data pasar belum lengkap; siklus berikutnya mencoba lagi."""
 
 
 @dataclass
@@ -79,7 +88,16 @@ def fetch_view(ctx: Ctx, exec_day: pd.Timestamp) -> mom.View:
                 raise
             failed.append(f"{c} ({type(e).__name__})")
     if failed:
-        ctx.say(f"[momentum] candle gagal diambil: {', '.join(failed[:20])}")
+        names = ", ".join(failed[:20])
+        give_up = utc_day(ctx.now) + pd.Timedelta(hours=FETCH_RETRY_UNTIL_H)
+        if pd.Timestamp(ctx.now).tz_convert("UTC").tz_localize(None) < give_up:
+            raise DataIncomplete(f"candle 1d gagal diambil untuk {len(failed)} koin ({names}); "
+                                 f"dicoba ulang sampai {FETCH_RETRY_UNTIL_H:02d}:00 UTC")
+        ctx.say(f"[momentum] candle gagal diambil: {names}")
+        ctx.outbox.add(f"🚨 <b>RMF — data candle tidak lengkap</b>\n"
+                       f"Masih gagal setelah {FETCH_RETRY_UNTIL_H:02d}:00 UTC: {notify.esc(names)}\n"
+                       "Siklus tetap jalan: koin itu dianggap tidak eligible (posisinya dijual). "
+                       "Cek manual.")
     # Funding basket TIDAK diambil di sini: basket hanya dipakai aturan berhenti,
     # jadi diambil setelah order dan pesan terkirim (_finish_bench).
     return mom.market_view(candles, meta, exec_day, cfg, None)
@@ -152,6 +170,7 @@ def run_momentum(ctx: Ctx) -> dict | None:
     if not (need_paper or need_live):
         return None
     cfg = ctx.cfg
+    _finish_stale_record(ctx, exec_day)
     vdoc = store.load_json("momentum_view.json")
     if vdoc and vdoc.get("exec_day") == exec_day:
         view = mom.View.from_dict(vdoc)
@@ -188,6 +207,24 @@ def run_momentum(ctx: Ctx) -> dict | None:
         out["stop"] = _record_day(ctx, paper, vrec, mids, out)
         store.save_json("momentum_paper.json", paper)
     return out
+
+
+def _finish_stale_record(ctx: Ctx, exec_day: str) -> None:
+    """Pencatatan hari sebelumnya yang terputus diselesaikan SEBELUM hari baru
+    menimpa momentum_view.json dan pending_record (audit 2026-10-05 F7)."""
+    paper = store.load_json("momentum_paper.json") or {}
+    rec = paper.get("pending_record")
+    if not rec or rec.get("exec_day") == exec_day:
+        return
+    vdoc = store.load_json("momentum_view.json")
+    if not vdoc or vdoc.get("exec_day") != rec["exec_day"]:
+        ctx.say(f"[momentum] catatan {rec['exec_day']} tidak bisa diselesaikan (view hilang); dibuang")
+        paper.pop("pending_record", None)
+        store.save_json("momentum_paper.json", paper)
+        return
+    ctx.say(f"[momentum] menyelesaikan catatan {rec['exec_day']} yang terputus")
+    _record_day(ctx, paper, mom.View.from_dict(vdoc), ctx.info.all_mids(), {})
+    store.save_json("momentum_paper.json", paper)
 
 
 def _paper_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, t: str) -> dict:

@@ -48,6 +48,8 @@ def main(now: dt.datetime | None = None) -> int:
                    klines=binance.KlineClient(cfg.flush.signal_source), ctrl=ctrl, outbox=outbox,
                    now=now, trader_factory=factory)
 
+    _account_checks(ctx)
+
     res = {}
     for name, fn in (("momentum", jobs.run_momentum), ("flush", jobs.run_flush)):
         try:
@@ -68,6 +70,43 @@ def main(now: dt.datetime | None = None) -> int:
         print(f"[cycle] {pending} pesan Telegram masih tertahan")
     print(f"[cycle] selesai: momentum={did.get('momentum')} flush={did.get('flush')} errors={len(errors)}")
     return 1 if errors else 0
+
+
+AGENT_WARN_DAYS = 14
+
+
+def _account_checks(ctx) -> None:
+    """Sekali per hari UTC (audit 2026-10-05 F4 + blokir MEX), hanya baca:
+      * API wallet RMF kedaluwarsa <= 14 hari lagi -> alarm (live berhenti saat lewat)
+      * API wallet di execution.blocked_agents masih terdaftar di akun -> alarm
+    Gagal membaca tidak pernah menggagalkan siklus."""
+    ex, now = ctx.cfg.execution, ctx.now
+    seen = store.load_json("alerts.json", {}) or {}
+    today = now.date().isoformat()
+    if seen.get("account_check_day") == today:
+        return
+    seen["account_check_day"] = today
+    store.save_json("alerts.json", seen)
+    if ex.agent_valid_until:
+        left = (dt.date.fromisoformat(ex.agent_valid_until) - now.date()).days
+        if left <= AGENT_WARN_DAYS:
+            ctx.outbox.add(f"⏳ <b>RMF — API wallet {'SUDAH kedaluwarsa' if left < 0 else f'kedaluwarsa {left} hari lagi'}</b>"
+                           f" ({ex.agent_valid_until})\nLive berhenti setelah tanggal itu. Buat API wallet baru di HYPE, "
+                           f"ganti secret {notify.esc(ex.agent_secret)}, perbarui agent_address + "
+                           "agent_valid_until di config.yaml.")
+    if ex.blocked_agents and ex.master_address:
+        try:
+            agents = ctx.info.post({"type": "extraAgents", "user": ex.master_address}, weight=2) or []
+        except Exception as e:  # noqa: BLE001
+            print(f"[cycle] cek API wallet akun gagal ({type(e).__name__})")
+            return
+        blocked = {a.lower() for a in ex.blocked_agents}
+        bad = [a for a in agents if str(a.get("address", "")).lower() in blocked]
+        if bad:
+            names = ", ".join(f"{a.get('name', '-')} ({str(a.get('address'))[:10]}…)" for a in bad)
+            ctx.outbox.add(f"🚫 <b>RMF — API wallet bot lain masih terdaftar di akun RMF</b>\n{notify.esc(names)}\n"
+                           "Bot itu bisa trading di akun ini. Hapus di HYPE (menu API). "
+                           "RMF tetap berhenti kalau ada posisi yang bukan miliknya.")
 
 
 def _alert_once(outbox, now, key, text, hours=6):

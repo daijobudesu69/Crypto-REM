@@ -32,8 +32,12 @@ def main() -> int:
         t = live.make_trader(cfg, key)
         live.verify_agent(t, cfg, dt.datetime.now(dt.timezone.utc))
         print(f"✓ agent {t.agent_address} terdaftar di {cfg.execution.master_address}")
-        eq, how = t.equity()
-        print(f"✓ ekuitas subaccount {cfg.execution.account_address}: {eq:.2f} USDC ({how})")
+        parts = t.equity_parts()
+        eq, how = live.equity_from_parts(parts)
+        print(f"✓ ekuitas akun {cfg.execution.account_address}: {eq:.2f} USDC ({how})")
+        # Semua komponen, untuk dicocokkan dengan UI HYPE di hari live pertama
+        # (cara baca ekuitas mode unified belum pernah diuji dengan posisi terbuka).
+        print("  komponen: " + ", ".join(f"{k}={v}" for k, v in parts.items()))
         pos = t.positions()
         print(f"✓ posisi: {pos or 'tidak ada'}")
         if eq < cfg.capital_usdc * 0.9:

@@ -3,6 +3,30 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.2 — 2026-10-05
+
+Audit infrastruktur ([docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md)).
+Aturan strategi momentum tidak berubah. Flush (paper), keputusan pemilik:
+- Q1: hard cap risiko event 8% DIHAPUS, sizing kembali sama dengan simulasi riset
+  (small_capital.simulate): risiko per koin = min(0,5%, 8% / n koin), total event
+  tidak dipotong (bisa > 8% karena minimum order). Simulasi ulang
+  (research/q1_event_cap.py): 200 -> 410,6 tanpa cap vs 397,5 dengan cap 8%;
+  20 seed: cap tidak pernah lebih baik. Risiko event maks di simulasi 11-12,6%.
+- Q2: tetap (pilih acak 15 dulu, baru buang yang tidak bisa diperdagangkan).
+- F1: candle 1d koin yang gagal di-fetch tidak lagi membuat posisinya dijual;
+  siklus dicoba ulang sampai 03:00 UTC, lalu jalan dengan alarm.
+- F2: order beli live yang timeout tapi terisi tetap tercatat milik RMF (tidak HALT).
+- F3: pesan Telegram yang ditolak permanen (400) tidak menahan alarm di belakangnya.
+- F4: alarm 14 hari sebelum API wallet kedaluwarsa (RMF.bot: 2027-01-03).
+- F5: ekuitas live di mode unifiedAccount = spot USDC + uPnL (perp accountValue
+  diabaikan). Wajib dicocokkan dengan UI HYPE di hari live pertama.
+- F6: siklus terakhir watcher selalu selesai sebelum timeout job.
+- F7: catatan harian yang terputus diselesaikan sebelum hari baru.
+- F8: run_status.py --flush menilai bar yang diminta.
+- F9: actions/checkout@v5, actions/setup-python@v6 (Node 24).
+- Blokir MEX: `execution.blocked_agents` (MEX.bot) -> alarm harian selama masih
+  terdaftar di akun RMF. Crypto-MEX diblokir dari akun ini di repo MEX.
+
 ## rmf-0.1.1 — 2026-10-05
 
 Infrastruktur saja; aturan strategi tidak berubah.

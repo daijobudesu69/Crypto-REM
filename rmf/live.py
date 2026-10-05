@@ -108,20 +108,28 @@ class HypeTrader:
                                   "cross": p["leverage"]["type"] == "cross"}
         return out
 
-    def equity(self) -> tuple[float, str]:
-        """(ekuitas USDC, metode). Perp accountValue dulu; kalau 0 (mode unified
-        account), saldo USDC spot + PnL belum terealisasi. Verifikasi metode ini
-        saat pertama kali tools/check_live.py dijalankan."""
+    def abstraction(self) -> str | None:
+        """Mode akun HYPE (mis. 'unifiedAccount', 'portfolioMargin', 'default'); None = tidak terbaca."""
+        try:
+            r = self.info.post("/info", {"type": "userAbstraction", "user": self.account})
+            return r if isinstance(r, str) else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def equity_parts(self) -> dict:
         st = self.info.user_state(self.account)
-        av = float((st.get("marginSummary") or {}).get("accountValue") or 0)
-        if av > 0:
-            return av, "perp accountValue"
-        upnl = sum(float(ap["position"].get("unrealizedPnl") or 0) for ap in st.get("assetPositions", []))
-        usdc = 0.0
+        usdc = hold = 0.0
         for b in self.info.spot_user_state(self.account).get("balances", []):
             if b["coin"] == "USDC":
-                usdc = float(b["total"])
-        return usdc + upnl, "spot USDC + uPnL (unified)"
+                usdc, hold = float(b["total"]), float(b.get("hold") or 0)
+        return {"abstraction": self.abstraction(),
+                "perp_account_value": float((st.get("marginSummary") or {}).get("accountValue") or 0),
+                "spot_usdc": usdc, "spot_usdc_hold": hold,
+                "upnl": sum(float(ap["position"].get("unrealizedPnl") or 0) for ap in st.get("assetPositions", []))}
+
+    def equity(self) -> tuple[float, str]:
+        """(ekuitas USDC, metode); lihat equity_from_parts."""
+        return equity_from_parts(self.equity_parts())
 
     def set_leverage(self, coin: str, leverage: int, cross: bool) -> dict:
         return order_status(self.exchange.update_leverage(leverage, coin, is_cross=cross))
@@ -133,6 +141,23 @@ class HypeTrader:
         return order_status(self.exchange.order(
             coin, is_buy, sz, px, {"limit": {"tif": "Ioc"}}, reduce_only=reduce_only,
             cloid=Cloid.from_str(cloid_hex) if cloid_hex else None))
+
+
+UNIFIED = ("unifiedAccount", "portfolioMargin")
+
+
+def equity_from_parts(p: dict) -> tuple[float, str]:
+    """Mode unified / portfolio margin: dokumentasi HYPE menyatakan semua saldo ada
+    di spot clearinghouse dan perp state "not meaningful", jadi perp accountValue
+    TIDAK dipakai walau > 0 (audit 2026-10-05 F5). Mode biasa: perp accountValue
+    (sudah termasuk uPnL). Mode tidak terbaca: cara lama (perp kalau > 0).
+    Belum diverifikasi dengan posisi terbuka: bandingkan dengan UI HYPE di hari
+    live pertama (tools/check_live.py mencetak semua komponennya)."""
+    mode = p.get("abstraction")
+    av = p["perp_account_value"]
+    if mode in UNIFIED or (mode is None and av <= 0):
+        return p["spot_usdc"] + p["upnl"], f"spot USDC + uPnL ({mode or 'mode tidak terbaca'})"
+    return av, f"perp accountValue ({mode or 'mode tidak terbaca'})"
 
 
 def make_trader(cfg, agent_key: str):
@@ -229,6 +254,10 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
         res["orders"].append({"coin": coin, "side": "SELL", "qty": fsz, "px": fpx, "mid": mid,
                               "reason": why, "status": "filled" if fsz > 0 else "failed"})
 
+    # Koin yang ordernya SUDAH dikirim (atau mungkin terkirim). Order yang
+    # timeout bisa tetap terisi di bursa; tanpa ini posisinya dianggap asing di
+    # percobaan berikutnya dan live berhenti (audit 2026-10-05 F2).
+    tried = set()
     if buys:
         usd = mom.per_coin_usd(eq, cfg)
         for coin in buys:
@@ -241,6 +270,7 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
                 sz = mom.order_size(usd, mid, d, cfg.momentum.min_order_usdc)
                 if journal:
                     journal(coin)
+                tried.add(coin)
                 if coin in only_isolated:
                     lv = trader.set_leverage(coin, 1, False)
                 else:
@@ -261,8 +291,7 @@ def run_momentum(view: mom.View, cfg, trader, mode: str, block_entries: bool, no
                                   "status": "filled" if fsz > 0 else "failed"})
     try:
         res["equity_after"], _ = trader.equity()
-        bought = {o["coin"] for o in res["orders"] if o["side"] == "BUY"}
-        after = {c: p for c, p in trader.positions().items() if c in owned or c in bought}
+        after = {c: p for c, p in trader.positions().items() if c in owned or c in tried}
         res["positions_after"] = {c: p["szi"] for c, p in after.items()}
         res["gross_after"] = sum(abs(p["szi"]) * mids.get(c, p["entry_px"]) for c, p in after.items())
     except Exception as e:  # noqa: BLE001

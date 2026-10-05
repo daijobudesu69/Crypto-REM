@@ -103,7 +103,7 @@ def test_flush_sizing_uses_combined_equity(state_dir, cfg, world):
     st = store.load_json("flush_paper.json")
     risk = [p["risk_usd"] for p in st["book"]["positions"].values()]
     assert risk and max(risk) <= 2 * cfg.capital_usdc * cfg.flush.risk_pct / 100 + 1e-6
-    assert sum(risk) <= cfg.capital_usdc * cfg.flush.max_event_risk_pct / 100 * 1.01
+    # total risiko event tidak dipotong (seperti simulasi riset, audit 2026-10-05 Q1)
     assert out["opened"]
 
 

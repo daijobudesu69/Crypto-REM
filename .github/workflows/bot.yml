@@ -34,11 +34,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0          # rebase di save_state.sh butuh riwayat penuh
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -64,7 +64,12 @@ jobs:
           agent_key="${AGENT_KEY_IN:-}"
           unset AGENT_KEY_IN
           INTERVAL=600
-          DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))
+          # Siklus terakhir harus MULAI cukup awal supaya selesai (timeout 1500 s +
+          # 30 s kill + ~2 menit simpan state) sebelum timeout-minutes 350 job;
+          # 10 menit disisakan untuk checkout/pip. Kalau job dibunuh di tengah
+          # siklus, state siklus itu hilang (audit 2026-10-05 F6).
+          CYCLE_BUDGET=$(( 1500 + 30 + 120 ))
+          DEADLINE=$(( $(date +%s) + 340*60 - CYCLE_BUDGET ))
           worst=0
           n=0
           echo "[watch] mode=${MODE} interval=${INTERVAL}s"

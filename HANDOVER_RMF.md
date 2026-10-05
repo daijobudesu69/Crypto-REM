@@ -35,7 +35,7 @@ Ditulis 2026-10-04, di akhir sesi riset. Folder proyek: `C:\Crypto data\Crypto-M
 | Syarat | **≥10 koin** memberi sinyal di candle yang sama |
 | Entry | Long semua (maks 15, acak) di open 4h berikutnya |
 | SL / TP / waktu | Entry ∓ **2 × ATR(14) 4h**, keluar paksa setelah 48 candle (8 hari) |
-| Risiko | 0,5% ekuitas per koin, maks 8% per event |
+| Risiko | min(0,5%, 8% ÷ jumlah koin) ekuitas per koin. Total event **tidak dipotong** (bisa > 8% karena minimum order; maks ±11% di simulasi). Hard cap 8% dihapus 2026-10-05, lihat docs/audit/AUDIT_2026-10-05.md Q1 |
 | Aturan v2 | Tolak koin kalau risiko yang dipaksa minimum order > 2× target. Total notional (momentum + flush) ≤ 2× ekuitas |
 | **Sumber sinyal** | **Harus candle futures Binance.** Sinyal dari candle HYPE: +0,02R per event (tidak ada edge). Dari candle spot Binance: +0,05R, t 0,5 (tidak terbukti). Dari futures Binance lalu dieksekusi di HYPE: **+0,18R** |
 
@@ -204,3 +204,4 @@ Pola diambil dari Crypto-MEX (hanya referensi, tidak ada kode yang di-import): w
 - **Rencana user:** paper 10 hari dulu (hari ke-1 = 2026-10-05), lalu deposit sampai 200 USDC (saldo 2026-10-05: 127,52) dan user menyalakan `momentum: live` sendiri.
 - **Telegram & Sheets aktif** sejak 2026-10-05. Format pesan sementara mengikuti heartbeat MEX; format final dibahas nanti. Smoke test: `gh workflow run smoke.yml`.
 - **Belum ada:** flush live (butuh VPS lolos `fapi`), update artifact report.
+- **Audit infrastruktur 2026-10-05** (rmf-0.1.2): 8 perbaikan + blokir MEX, lihat [docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md). Tindakan user ada di §5 laporan itu (hapus MEX.bot, cek ekuitas hari live pertama, API wallet baru sebelum 2026-12-20, keputusan Q1/Q2).
