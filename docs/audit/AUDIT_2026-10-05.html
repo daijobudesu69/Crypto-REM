@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body style="margin:0">
+<title>Audit Infrastruktur RMF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: satu kolom baca (~68ch) seperti log audit; tabel di wadah gulir sendiri; status dikodekan sebagai chip */
+:root {
+  --bg: #f5f7f8; --surface: #ffffff; --ink: #17212b; --muted: #5a6875; --line: #d9e0e6;
+  --accent: #1f5f8b; --accent-soft: #e3eef6;
+  --ok: #1d7a4f; --ok-soft: #e2f3ea; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #b3261e; --bad-soft: #fbe5e3;
+  --code-bg: #eef2f5;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151b; --surface: #161e26; --ink: #e3e9ee; --muted: #9aa8b4; --line: #2a3540;
+  --accent: #7db7e0; --accent-soft: #19303f;
+  --ok: #6fcf9c; --ok-soft: #15301f; --warn: #e8b34f; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1a17;
+  --code-bg: #1d2731; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #161e26; --ink: #e3e9ee; --muted: #9aa8b4; --line: #2a3540;
+  --accent: #7db7e0; --accent-soft: #19303f;
+  --ok: #6fcf9c; --ok-soft: #15301f; --warn: #e8b34f; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1a17;
+  --code-bg: #1d2731; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15.5px; line-height: 1.6; }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.45rem; font-weight: 600; padding-top: 6px; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p, li { max-width: 68ch; }
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 10px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 0.9rem; }
+.meta b { color: var(--ink); font-weight: 600; }
+section { display: grid; gap: 14px; padding-block: 26px; border-bottom: 1px solid var(--line); }
+section:last-of-type { border-bottom: 0; }
+.lede { font-size: 1.05rem; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 2px; }
+.stat .n { font-family: var(--f-display); font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--muted); font-size: 0.85rem; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--f-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.id { font-family: var(--f-mono); font-weight: 500; white-space: nowrap; }
+.chip { display: inline-block; font-family: var(--f-mono); font-size: 0.72rem; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.c-ok { background: var(--ok-soft); color: var(--ok); }
+.c-warn { background: var(--warn-soft); color: var(--warn); }
+.c-bad { background: var(--bad-soft); color: var(--bad); }
+.c-info { background: var(--accent-soft); color: var(--accent); }
+.callout { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 12px 14px; border-radius: 0 8px 8px 0; display: grid; gap: 6px; }
+.callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+.callout p { margin: 0; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--f-mono); font-size: 0.84rem; line-height: 1.5; margin: 0; white-space: pre; }
+ol, ul { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+details[open] { padding-bottom: 14px; }
+summary { cursor: pointer; font-weight: 600; }
+details > *:not(summary) { margin-top: 10px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.two > div { min-width: 0; }
+.done { text-decoration: line-through; color: var(--muted); }
+footer { color: var(--muted); font-size: 0.85rem; padding-top: 18px; }
+@media (prefers-reduced-motion: no-preference) { details summary { transition: color .15s; } summary:hover { color: var(--accent); } }
+</style>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">Crypto-RMF · forward test HYPE · log audit</span>
+  <h1>Audit Infrastruktur RMF</h1>
+  <div class="meta">
+    <span>Tanggal <b>5 Okt 2026</b></span>
+    <span>Basis <b class="mono">7d0c532</b> (rmf-0.1.1)</span>
+    <span>Hasil <b class="mono">rmf-0.1.6</b></span>
+    <span>Mode <b>paper / paper</b>, hari ke-1</span>
+  </div>
+</header>
+
+<section>
+  <p class="lede">Audit seluruh kode bot, workflow GitHub, dan config, dicocokkan dengan kode riset yang menjadi sumber angka ekspektasi. <b>Aturan strategi momentum tidak diubah.</b> Dua hal di flush yang menyentuh cara strategi dijalankan diputuskan oleh pemilik. Setelah audit, lima PR tindak lanjut masuk di sesi yang sama.</p>
+  <div class="stats">
+    <div class="stat"><span class="n">8</span><span class="l">bug/risiko diperbaiki (F1–F8)</span></div>
+    <div class="stat"><span class="n">3</span><span class="l">bug dibuktikan dengan tes reproduksi dulu</span></div>
+    <div class="stat"><span class="n">7</span><span class="l">PR di-merge (6 RMF + 1 MEX)</span></div>
+    <div class="stat"><span class="n">64 → 96</span><span class="l">tes offline, semua lolos</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Yang sudah sesuai riset</h2>
+  <ul>
+    <li>Universe momentum <code>config/hype_universe.txt</code> identik dengan daftar riset: 150/150 koin, urutan sama (urutan memecah seri peringkat).</li>
+    <li>Universe sinyal flush identik dengan data lake spot Binance 4h: 150/150 pair.</li>
+    <li>Filter BTC &gt; EMA50, eligible ≥60 hari, return 14 hari, buffer beli 1–10 / jual &gt;15, basket "beli semua koin", sinyal BB + volume, urutan cek SL/TP flush: sama dengan <code>hl_full.py</code>, <code>xsec_hl.py</code>, <code>trade_sim.py</code>.</li>
+    <li>Run "cancelled" di Actions adalah run antrean yang digantikan run lebih baru, bukan kegagalan.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Temuan dan perbaikan</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Prioritas</th><th>Masalah</th><th>Perbaikan</th></tr></thead>
+    <tbody>
+      <tr><td class="id">F1</td><td><span class="chip c-bad">tinggi</span></td><td>Candle 1 koin gagal di-fetch, koin dianggap "tidak eligible", lalu <b>posisinya dijual</b> dan peringkat lain bergeser. Terbukti dengan tes reproduksi.</td><td>Siklus dibatalkan dan diulang tiap ±10 menit sampai 10:00 WIB, lalu lanjut dengan alarm.</td></tr>
+      <tr><td class="id">F2</td><td><span class="chip c-bad">tinggi</span></td><td>Order beli live yang timeout padahal terisi tidak tercatat milik RMF, lalu live HALT. Terbukti dengan tes reproduksi.</td><td>Koin yang ordernya sudah dikirim tetap dihitung milik RMF.</td></tr>
+      <tr><td class="id">F3</td><td><span class="chip c-warn">sedang</span></td><td>Satu pesan Telegram yang ditolak (HTTP 400) menahan semua pesan berikutnya, termasuk alarm DD, sampai 48 jam. Terbukti dengan tes reproduksi.</td><td>Dikirim ulang sebagai teks biasa; kalau tetap ditolak, dibuang. Gangguan sementara tetap dicoba ulang.</td></tr>
+      <tr><td class="id">F4</td><td><span class="chip c-warn">sedang</span></td><td>API wallet RMF.bot kedaluwarsa 3 Jan 2027, di tengah evaluasi 6 bulan, tanpa peringatan.</td><td>Alarm harian mulai 14 hari sebelum kedaluwarsa.</td></tr>
+      <tr><td class="id">F5</td><td><span class="chip c-warn">sedang</span></td><td>Akun mode <code>unifiedAccount</code>: bot bisa salah membaca ekuitas, sehingga sizing dan breaker ikut salah.</td><td>Ekuitas = saldo USDC spot saja. Dikoreksi setelah canary, lihat di bawah.</td></tr>
+      <tr><td class="id">F6</td><td><span class="chip c-info">rendah</span></td><td>Siklus terakhir watcher bisa melewati timeout job, sehingga state siklus itu hilang.</td><td>Siklus terakhir dimulai cukup awal.</td></tr>
+      <tr><td class="id">F7</td><td><span class="chip c-info">rendah</span></td><td>Catatan harian yang terputus bisa tertimpa hari baru.</td><td>Catatan lama diselesaikan dulu.</td></tr>
+      <tr><td class="id">F8</td><td><span class="chip c-info">rendah</span></td><td><code>run_status.py --flush</code> memakai logika candle lama.</td><td>Disamakan dengan bot.</td></tr>
+      <tr><td class="id">F9</td><td><span class="chip c-info">opsional</span></td><td>Peringatan Node 20 di GitHub Actions.</td><td><code>checkout@v5</code>, <code>setup-python@v6</code>.</td></tr>
+      <tr><td class="id">F10</td><td><span class="chip c-info">wajib</span></td><td>Belum ada catatan audit.</td><td><code>docs/audit/AUDIT_2026-10-05.md</code> + CHANGELOG.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Keputusan pemilik: flush</h2>
+  <div class="two">
+    <div>
+      <h3>Q1 · cap risiko event 8%</h3>
+      <p>Simulasi riset tidak memotong total risiko satu event (maks ±11% karena minimum order 10 USDC). Bot memotong di 8%. Simulasi diulang atas izin pemilik:</p>
+    </div>
+    <div>
+      <h3>Q2 · urutan pilih acak 15 koin</h3>
+      <p>Riset membuang koin yang tidak bisa diperdagangkan dulu, baru memilih acak. Bot memilih acak dulu, baru membuang, jadi bisa masuk kurang dari 15 koin.</p>
+      <p><span class="chip c-ok">diputuskan</span> Tetap seperti bot.</p>
+    </div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>200 USDC</th><th class="num">Tanpa cap (riset)</th><th class="num">Cap 8% (bot lama)</th></tr></thead>
+    <tbody>
+      <tr><td>Momentum + flush, Jul 2024 → Okt 2026</td><td class="num"><b>410,6</b></td><td class="num">397,5</td></tr>
+      <tr><td>Momentum + flush, mulai Jan 2025</td><td class="num"><b>321,2</b></td><td class="num">317,5</td></tr>
+      <tr><td>Flush saja, Jul 2024 →</td><td class="num"><b>286,0</b></td><td class="num">266,2</td></tr>
+      <tr><td>Rata-rata 20 seed acak (Jul 2024 →)</td><td class="num"><b>400,1</b></td><td class="num">385,3</td></tr>
+      <tr><td>Seed yang lebih baik dengan cap</td><td class="num">–</td><td class="num">0 / 20</td></tr>
+    </tbody>
+  </table></div>
+  <p><span class="chip c-ok">diputuskan</span> Cap 8% dihapus. Risiko per koin = min(0,5%, 8% ÷ jumlah koin), sama dengan simulasi. Selisih hanya berasal dari 4 event; arahnya konsisten, sampelnya kecil.</p>
+</section>
+
+<section>
+  <h2>Tindak lanjut di sesi yang sama</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>UTC</th><th>PR</th><th>Versi</th><th>Isi</th></tr></thead>
+    <tbody>
+      <tr><td class="num">12:16</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/1">RMF #1</a></td><td class="mono">0.1.2</td><td>Audit F1–F10, alarm MEX.bot, Q1 cap dihapus</td></tr>
+      <tr><td class="num">12:16</td><td><a href="https://github.com/daijobudesu69/Crypto-MEX/pull/21">MEX #21</a></td><td class="mono">–</td><td>Executor MEX berhenti sebelum order apa pun di akun RMF</td></tr>
+      <tr><td class="num">12:49</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/2">RMF #2</a></td><td class="mono">–</td><td>Pesan harian tanpa baris penutup</td></tr>
+      <tr><td class="num">12:51</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/3">RMF #3</a></td><td class="mono">0.1.3</td><td>Status TAHAN</td></tr>
+      <tr><td class="num">13:01</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/4">RMF #4</a></td><td class="mono">0.1.4</td><td>Canary</td></tr>
+      <tr><td class="num">13:17</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/5">RMF #5</a></td><td class="mono">0.1.5</td><td>Watcher menyalakan penggantinya sendiri</td></tr>
+      <tr><td class="num">13:26</td><td><a href="https://github.com/daijobudesu69/Crypto-RMF/pull/6">RMF #6</a></td><td class="mono">0.1.6</td><td>Koreksi F5: ekuitas unified = spot USDC saja</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Canary pertama dan koreksi F5</h2>
+  <p>Canary membeli lalu menjual 0,11 HYPE di akun sungguhan pukul 13:11 UTC. Semua langkah ✅, dengan biaya <b>0,0092 USDC</b>. Angka saldonya, dicocokkan dengan riwayat fill HYPE, menjawab cara membaca ekuitas di mode unified:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Saldo</th><th class="num">Sebelum</th><th class="num">Posisi terbuka</th><th class="num">Sesudah</th></tr></thead>
+    <tbody>
+      <tr><td>perp <code>accountValue</code></td><td class="num">0,0</td><td class="num"><b>10,13925</b></td><td class="num">0,0</td></tr>
+      <tr><td>spot USDC <code>total</code></td><td class="num">127,521479</td><td class="num">127,516807</td><td class="num">127,512245</td></tr>
+      <tr><td>uPnL</td><td class="num">0</td><td class="num">−0,00011</td><td class="num">0</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>perp <code>accountValue</code> = margin posisi, bukan ekuitas.</b> Kode sebelum audit akan membaca ekuitas 10 USDC dan menyalakan breaker DD di hari live pertama. Perbaikan F5 mencegah ini.</li>
+    <li><b>Spot USDC sudah memuat uPnL.</b> Saat posisi dibuka, saldo spot turun 0,004672 = fee 0,004562 + 0,00011 (uPnL), dan saldo akhir cocok sampai 6 desimal. Rumus F5 awal (spot + uPnL) menghitung uPnL dua kali, sehingga breaker bisa menyala di drawdown ±20%, bukan 40%. Dikoreksi di rmf-0.1.6 sebelum live menyala.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Rem darurat: status TAHAN</h2>
+  <p>Selama live menyala, bot mengecek posisi akun setiap ±10 menit. Kalau posisi RMF hilang atau mengecil tanpa dijual bot (tutup manual, likuidasi, ADL, delisting):</p>
+  <ul>
+    <li>Telegram langsung: "🛑 RMF — posisi ditutup di luar bot".</li>
+    <li>Tidak ada pembelian sama sekali sampai diaktifkan kembali. Sisa posisi tetap dijual sesuai aturan. Buku paper tetap jalan sebagai pembanding.</li>
+  </ul>
+  <p>Intervensi darurat cukup dengan menutup posisi di aplikasi HYPE. Mengaktifkan kembali:</p>
+  <pre>gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f resume=true</pre>
+  <details>
+    <summary>Kenapa likuidasi praktis tidak mungkin</summary>
+    <p>Posisi 10 × ±10 USDC = 100 USDC (0,5× ekuitas), cross 1×, margin pemeliharaan 12,91 USDC. Likuidasi butuh semua koin turun <b>214%</b> sekaligus pada ekuitas 200 USDC (131% pada saldo 127,52). Harga tidak bisa turun lebih dari 100%. Penutupan di luar bot yang masih mungkin hanya manual, ADL, dan delisting, dan semuanya memicu TAHAN.</p>
+  </details>
+  <details>
+    <summary>Perintah kontrol lain</summary>
+    <pre>gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=flatten
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=manage
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=paper
+gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f reset_breaker=true</pre>
+    <p><code>flatten</code> menutup semua posisi RMF dalam ±10 menit; <code>manage</code> hanya menjual; <code>paper</code> tidak menyentuh akun.</p>
+  </details>
+</section>
+
+<section>
+  <h2>Kejadian lain</h2>
+  <ul>
+    <li><b>Watcher putus 13:02 UTC</b>: cron GitHub di repo ini hanya terpicu tiap 3–6 jam. Watcher dinyalakan manual 13:03 dan satu pengganti berkode baru diantrekan. Celah ±2 menit, tidak ada siklus terlewat. Sejak rmf-0.1.5, watcher menyalakan penggantinya sendiri.</li>
+    <li><b>runs.csv selama paper</b>: 0 error dari 24 baris. Momentum hari ke-1 jalan 07:10 WIB, flush 0 event.</li>
+    <li><b>MEX</b>: API wallet MEX.bot sudah dihapus pemilik dari akun RMF (tinggal Mobile QR dan RMF.bot). Executor MEX diblokir dari akun ini; selama config MEX masih menunjuk akun RMF, MEX mengirim alarm "executor berhenti" sekali sehari.</li>
+    <li><b>Pesan Telegram</b>: semua jenis pesan dibangkitkan dari kode asli dan ditinjau pemilik.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Menuju live</h2>
+  <ol>
+    <li class="done">Hapus MEX.bot dari API wallet HYPE</li>
+    <li class="done">Canary jalur order live</li>
+    <li>Selesaikan paper 10 hari (hari ke-1 = 5 Okt 2026)</li>
+    <li>Deposit sampai 200 USDC (saldo sekarang 127,52)</li>
+    <li>Nyalakan live, lalu cocokkan "Live: ekuitas" di Telegram dengan nilai akun di UI HYPE</li>
+    <li>Siapkan API wallet baru sebelum <b>20 Des 2026</b> (RMF.bot berlaku sampai 3 Jan 2027)</li>
+  </ol>
+  <pre>gh workflow run control.yml --repo daijobudesu69/Crypto-RMF -f momentum=live</pre>
+  <div class="callout">
+    <p><b>Intervensi mengubah kebandingan dengan simulasi.</b> Catat tanggal dan alasan setiap intervensi supaya evaluasi 6 bulan bisa memisahkan hasil strategi dari hasil intervensi.</p>
+  </div>
+</section>
+
+<footer>
+  Sumber lengkap di repo: <a href="https://github.com/daijobudesu69/Crypto-RMF/blob/main/docs/audit/AUDIT_2026-10-05.md">docs/audit/AUDIT_2026-10-05.md</a> · <a href="https://github.com/daijobudesu69/Crypto-RMF/blob/main/CHANGELOG.md">CHANGELOG.md</a> · <a href="https://github.com/daijobudesu69/Crypto-RMF/blob/main/research/q1_event_cap.py">research/q1_event_cap.py</a>
+</footer>
+</div>
+
+</body>
+</html>
