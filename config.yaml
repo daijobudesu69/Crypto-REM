@@ -102,11 +102,11 @@ execution:
   #   account_address = SUBACCOUNT khusus RMF (bukan subaccount MEX)
   #   agent_address   = alamat API wallet; bot menolak jalan kalau kunci di
   #                     secret tidak menghasilkan alamat ini
-  master_address: ""
-  account_address: ""
-  agent_address: ""
+  master_address: "0x123bb2a1fe74395a57081d48077c28c9ca55a93b"   # akun utama (sama dengan MEX)
+  account_address: ""        # subaccount RMF: BELUM DIBUAT. Kosong = live menolak jalan
+  agent_address: "0x855127eb9d86d715aae469c399c26d31ef85627c"    # API wallet "RMF.bot"
   agent_secret: HYPE_RMF_AGENT_KEY_66_CHAR
-  agent_valid_until: ""       # YYYY-MM-DD, API wallet HYPE maks 180 hari
+  agent_valid_until: "2027-01-03"   # RMF.bot berlaku s/d 2027-01-03 06:13 UTC (13:13 WIB)
   margin_mode: cross          # JANGAN isolated 3-5x (crash 10 Okt 2025: median alt -65% intrabar)
   leverage: 1                 # eksposur diatur ukuran order (0,5x), bukan leverage
   ioc_slippage: 0.01          # order market = IOC limit 1% menembus mid
