@@ -24,6 +24,7 @@ Aturan strategi momentum tidak berubah. Flush (paper), keputusan pemilik:
 - F7: catatan harian yang terputus diselesaikan sebelum hari baru.
 - F8: run_status.py --flush menilai bar yang diminta.
 - F9: actions/checkout@v5, actions/setup-python@v6 (Node 24).
+- Pesan harian: baris penutup "Pesan ini muncul 1× sehari ..." dihapus (permintaan pemilik).
 - Blokir MEX: `execution.blocked_agents` (MEX.bot) -> alarm harian selama masih
   terdaftar di akun RMF. Crypto-MEX diblokir dari akun ini di repo MEX.
 
