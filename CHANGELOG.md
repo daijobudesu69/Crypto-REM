@@ -3,6 +3,16 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.3 — 2026-10-05
+
+Rem darurat baru; aturan strategi tidak berubah. Keputusan pemilik 2026-10-05.
+- Status TAHAN: setiap siklus (live/manage/flatten) posisi akun dibandingkan dengan
+  catatan posisi RMF. Posisi RMF yang hilang/mengecil tanpa dijual bot (tutup manual,
+  likuidasi, ADL, delisting) -> Telegram SAAT ITU JUGA, lalu tidak ada pembelian sama
+  sekali sampai pemilik mengaktifkan kembali (`control.yml -f resume=true`). Jual
+  sesuai aturan tetap jalan; buku paper tidak terpengaruh.
+- Kontrol: input baru `resume` (control.yml, control/bot.yaml, tools/set_control.py).
+
 ## rmf-0.1.2 — 2026-10-05
 
 Audit infrastruktur ([docs/audit/AUDIT_2026-10-05.md](docs/audit/AUDIT_2026-10-05.md)).

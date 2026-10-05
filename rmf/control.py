@@ -13,6 +13,8 @@ momentum:
 flush:
   off | paper           (live flush belum ada: sinyal futures butuh VPS)
 breaker_reset: nilai BARU apa pun = puncak ekuitas live di-reset ke ekuitas sekarang.
+resume:        nilai BARU apa pun = status TAHAN dilepas (posisi RMF yang ditutup di
+               luar bot -> bot berhenti membeli sampai pemilik mengaktifkan kembali).
 """
 from __future__ import annotations
 
@@ -35,6 +37,7 @@ class Control:
     momentum: str = "paper"
     flush: str = "paper"
     breaker_reset: str = ""
+    resume: str = ""
     problem: str | None = None
 
     @property
@@ -65,7 +68,8 @@ def read(paths=None) -> Control:
         # stop di bursa, jadi tidak ada yang perlu dijaga per siklus).
         return Control(problem=f"control/bot.yaml tidak bisa dibaca ({type(e).__name__}); dipakai paper/paper")
     c = Control(momentum=_norm(doc.get("momentum", "paper")), flush=_norm(doc.get("flush", "paper")),
-                breaker_reset=str(doc.get("breaker_reset") or "").strip())
+                breaker_reset=str(doc.get("breaker_reset") or "").strip(),
+                resume=str(doc.get("resume") or "").strip())
     probs = []
     if c.momentum not in MOMENTUM_MODES:
         probs.append(f"momentum '{c.momentum}' tidak dikenal")
@@ -77,7 +81,7 @@ def read(paths=None) -> Control:
     return c
 
 
-def render(momentum: str, flush: str, breaker_reset: str) -> str:
+def render(momentum: str, flush: str, breaker_reset: str, resume: str = "") -> str:
     if momentum not in MOMENTUM_MODES or flush not in FLUSH_MODES:
         raise ValueError("mode tidak dikenal")
     return f"""\
@@ -86,6 +90,7 @@ def render(momentum: str, flush: str, breaker_reset: str) -> str:
 #   gh workflow run control.yml -f momentum=live
 #   gh workflow run control.yml -f momentum=flatten      # tutup semua posisi live
 #   gh workflow run control.yml -f reset_breaker=true
+#   gh workflow run control.yml -f resume=true           # lepas status TAHAN
 #
 # momentum: off | paper | live | manage | flatten
 #   paper   hanya buku paper (default)
@@ -96,4 +101,5 @@ def render(momentum: str, flush: str, breaker_reset: str) -> str:
 momentum: "{momentum}"
 flush: "{flush}"
 breaker_reset: "{breaker_reset}"
+resume: "{resume}"
 """

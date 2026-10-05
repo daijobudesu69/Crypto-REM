@@ -3,7 +3,8 @@
 # Tiap percobaan mulai dari origin terbaru, jadi tidak pernah konflik dengan
 # commit state dari watcher.
 #
-# Env: MOMENTUM (tetap|off|paper|live|manage|flatten), FLUSH (tetap|off|paper), RESET (true|false)
+# Env: MOMENTUM (tetap|off|paper|live|manage|flatten), FLUSH (tetap|off|paper), RESET (true|false),
+#      RESUME (true|false)
 set -uo pipefail
 
 BRANCH="${GITHUB_REF_NAME:-main}"
@@ -12,6 +13,7 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
 args=(--momentum "${MOMENTUM:-tetap}" --flush "${FLUSH:-tetap}")
 if [ "${RESET:-false}" = "true" ]; then args+=(--reset-breaker); fi
+if [ "${RESUME:-false}" = "true" ]; then args+=(--resume); fi
 
 for i in 1 2 3 4 5; do
   if ! git fetch -q origin "${BRANCH}"; then sleep $((i * 3)); continue; fi

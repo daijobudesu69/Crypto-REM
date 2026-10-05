@@ -8,6 +8,7 @@ name: RMF control
 #   gh workflow run control.yml -f momentum=paper       # kembali paper saja
 #   gh workflow run control.yml -f flush=off
 #   gh workflow run control.yml -f reset_breaker=true
+#   gh workflow run control.yml -f resume=true          # lepas status TAHAN
 # Telegram mengonfirmasi "mode sekarang: ..." begitu watcher memakainya.
 on:
   workflow_dispatch:
@@ -25,6 +26,10 @@ on:
         default: tetap
       reset_breaker:
         description: "reset breaker DD live (puncak = ekuitas sekarang)"
+        type: boolean
+        default: false
+      resume:
+        description: "lepas status TAHAN (posisi ditutup di luar bot) -> beli normal lagi"
         type: boolean
         default: false
 
@@ -52,4 +57,5 @@ jobs:
           MOMENTUM: ${{ inputs.momentum }}
           FLUSH: ${{ inputs.flush }}
           RESET: ${{ inputs.reset_breaker }}
+          RESUME: ${{ inputs.resume }}
         run: bash tools/save_control.sh
