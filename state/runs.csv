@@ -42,3 +42,4 @@ time_utc,commit,momentum_mode,flush_mode,momentum,flush,live,errors,duration_s
 2026-10-06T05:03:09+00:00,745694f031,paper,paper,0,0,0,,0.0
 2026-10-06T06:03:16+00:00,745694f031,paper,paper,0,0,0,,0.0
 2026-10-06T07:03:22+00:00,745694f031,paper,paper,0,0,0,,0.0
+2026-10-06T08:02:10+00:00,745694f031,paper,paper,0,1,0,,25.3
