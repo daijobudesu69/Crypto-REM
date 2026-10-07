@@ -1,0 +1,2 @@
+entry_time,exit_time,coin,signal_bar,entry_px,exit_px,stop,target,qty,notional,risk_usd,forced_min,bars_held,reason,pnl_gross,fees,funding,pnl_net,r_multiple
+2026-10-07T16:02:11+00:00,2026-10-07T20:00:00+00:00,HEMI,2026-10-07T12:00:00+00:00,0.00590948,0.00631095,0.00550347,0.00631253,2410.57702246,14.24524947,0.97515169,0,1,TP,0.96778706,0.01325623,-0.00763395,0.96216477,0.98668216
