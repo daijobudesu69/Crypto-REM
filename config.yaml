@@ -46,7 +46,9 @@ universe:
   # berhenti, alarm, Sheets, atau live. Pesan harian dapat 1 baris pembanding
   # (+ 1 baris saat universe diperbarui). Butuh candle 1d SEMUA perp (bukan hanya
   # daftar riset), jadi siklus harian lebih lama.
-  compare_rolling: false
+  # Dinyalakan 2026-10-08 (keputusan user). Buku baru hanya dibuat di siklus
+  # trading harian buku utama, jadi mulai 2026-10-09 07:02 WIB.
+  compare_rolling: true
 
 momentum:
   n_hold: 10                  # isi sampai 10 posisi (peringkat 1-10)

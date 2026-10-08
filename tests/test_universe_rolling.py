@@ -83,8 +83,9 @@ def test_rolling_monthly_universe_filters_members(cfg):
 
 
 def test_config_defaults_and_validation():
+    assert config.Universe().compare_rolling is False                     # default kode: mati
     cfg = config.load()
-    assert cfg.universe.mode == "static" and cfg.universe.compare_rolling is False
+    assert cfg.universe.mode == "static"                                   # buku utama tetap static
     assert (cfg.universe.top_n, cfg.universe.exit_rank) == (150, 200)
     with pytest.raises(ValueError):
         config.from_dict({"universe": {"mode": "rolling_monthly"}})       # bukan untuk buku utama/live
@@ -102,6 +103,7 @@ def info():
 
 
 def test_default_off_writes_no_rolling_files(state_dir, cfg, info):
+    cfg = dataclasses.replace(cfg, universe=dataclasses.replace(cfg.universe, compare_rolling=False))
     out = jobs.run_momentum(ctx_at(cfg, info, at("2026-10-04")))
     assert "rolling" not in out
     assert not any("rolling" in f for f in os.listdir(state_dir))
@@ -109,7 +111,8 @@ def test_default_off_writes_no_rolling_files(state_dir, cfg, info):
 
 def test_second_book_does_not_touch_main_state(state_dir, tmp_path, cfg, info):
     main_files = ("momentum_paper.json", "momentum_view.json", "equity.csv", "orders.csv", "ranking.csv", "alerts.json")
-    c_off = ctx_at(cfg, info, at("2026-10-04"))
+    off = dataclasses.replace(cfg, universe=dataclasses.replace(cfg.universe, compare_rolling=False))
+    c_off = ctx_at(off, info, at("2026-10-04"))
     jobs.run_momentum(c_off)
     ref = tmp_path / "ref"
     shutil.copytree(state_dir, ref)
@@ -193,23 +196,38 @@ class FailingInfo(FakeInfo):
 
 def test_static_main_with_rolling_fetch_failure_is_isolated(state_dir, cfg):
     """Buku utama static (daftar riset); koin di luar daftar gagal diambil ->
-    buku pembanding menunggu siklus berikutnya, buku utama dan alarm tidak terpengaruh."""
+    buku pembanding menunggu, buku utama dan alarm tidak terpengaruh."""
     scfg = dataclasses.replace(cfg, universe=dataclasses.replace(cfg.universe, mode="static", compare_rolling=True))
     names = mom.static_universe(scfg)[:30]
-    src = universe_candles(n_coins=30)
-    c = {"BTC": src["BTC"], **{n: src[f"C{i:02d}"] for i, n in enumerate(names) if n != "BTC"}}
-    c["ZZNEW"] = src["C29"]
-    info = FailingInfo(c, meta=meta_for(c), fail={"ZZNEW"})
+
+    def world(day):
+        end = str(dt.date.fromisoformat(day) - dt.timedelta(days=1))
+        src = universe_candles(end_day=end, n_coins=30)
+        c = {"BTC": src["BTC"], **{n: src[f"C{i:02d}"] for i, n in enumerate(names) if n != "BTC"}}
+        c["ZZNEW"] = src["C29"]
+        return FailingInfo(c, meta=meta_for(c), fail={"ZZNEW"})
+
+    info = world("2026-10-04")
     cx = ctx_at(scfg, info, at("2026-10-04"))
     out = jobs.run_momentum(cx)
     assert out["paper"] and out["rolling"] is None
     assert len(texts(cx)) == 1 and "pembanding" not in texts(cx)[0] and "🚨" not in texts(cx)[0]
     assert store.load_json("momentum_paper_rolling.json") is None
-    # data pulih -> siklus berikutnya buku pembanding jalan sendiri, tanpa pesan baru
+    # data pulih siang hari: buku BARU tidak dibuat di harga siang, menunggu open berikutnya
     info.fail = set()
-    cx2 = ctx_at(scfg, info, at("2026-10-04", 0, 22))
+    assert jobs.run_momentum(ctx_at(scfg, info, at("2026-10-04", 6, 22))) is None
+    assert store.load_json("momentum_paper_rolling.json") is None
+    cx = ctx_at(scfg, world("2026-10-05"), at("2026-10-05"))
+    cx.info.fail = set()
+    assert jobs.run_momentum(cx)["rolling"]["start_day"] == "2026-10-05"
+    assert "pembanding universe bulanan" in texts(cx)[0]
+    # buku yang SUDAH ada: gagal di open -> dikejar siklus berikutnya, tanpa pesan baru
+    info = world("2026-10-06")
+    assert jobs.run_momentum(ctx_at(scfg, info, at("2026-10-06")))["rolling"] is None
+    info.fail = set()
+    cx2 = ctx_at(scfg, info, at("2026-10-06", 0, 22))
     assert jobs.run_momentum(cx2) is None
     st = store.load_json("momentum_paper_rolling.json")
-    assert st["last_day"] == "2026-10-04" and len(st["book"]["positions"]) == 10
+    assert st["last_day"] == "2026-10-06" and len(st["book"]["positions"]) == 10
     assert "ZZNEW" in store.load_json("universe_rolling.json")["members"]
-    assert texts(cx2) == [] and len(store.read("equity")) == 1 and len(store.read("equity_rolling")) == 1
+    assert texts(cx2) == [] and len(store.read("equity")) == 3 and len(store.read("equity_rolling")) == 2

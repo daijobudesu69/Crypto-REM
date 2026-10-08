@@ -182,7 +182,7 @@ def run_momentum(ctx: Ctx) -> dict | None:
     need_paper, need_live, exec_day = momentum_due(ctx)
     need_roll = rolling_due(ctx, exec_day)
     if not (need_paper or need_live):
-        if need_roll:                       # buku utama sudah selesai hari ini
+        if need_roll and store.load_json(ROLL_PAPER):   # buku utama sudah selesai hari ini
             mids = ctx.info.all_mids()
             main = (store.load_json("momentum_paper.json") or {}).get("book")
             _rolling_safe(ctx, _rolling_trade, exec_day, mids, ctx.now.isoformat(timespec="seconds"),
@@ -215,7 +215,7 @@ def run_momentum(ctx: Ctx) -> dict | None:
         if trade_paper:                     # buku utama tersimpan dulu sebelum fetch tambahan
             store.save_json("momentum_paper.json", paper)
         static_eq = out["paper"]["equity_before"] if out["paper"] else bk.equity(paper["book"], mids)
-        out["rolling"] = _rolling_safe(ctx, _rolling_trade, exec_day, mids, t, static_eq)
+        out["rolling"] = _rolling_safe(ctx, _rolling_trade, exec_day, mids, t, static_eq, trade_paper)
 
     if trade_paper:
         # Urutan sengaja: order tercatat -> pesan dikirim SEKARANG -> baru funding
@@ -477,10 +477,17 @@ def _rolling_view(ctx: Ctx, exec_day: str) -> mom.View:
     return view
 
 
-def _rolling_trade(ctx: Ctx, exec_day: str, mids: dict, t: str, static_eq: float | None) -> dict | None:
-    """Satu hari buku pembanding: aturan momentum sama persis, universe bulanan."""
+def _rolling_trade(ctx: Ctx, exec_day: str, mids: dict, t: str, static_eq: float | None,
+                   new_ok: bool = False) -> dict | None:
+    """Satu hari buku pembanding: aturan momentum sama persis, universe bulanan.
+
+    Buku baru hanya dibuat kalau new_ok (siklus yang sama dengan trading harian buku
+    utama, ±07:02 WIB): flag yang dinyalakan siang hari mulai di open berikutnya,
+    bukan di harga siang."""
     cfg = ctx.cfg
     st = store.load_json(ROLL_PAPER)
+    if st is None and not new_ok:
+        return None
     if st and st.get("last_day") == exec_day:
         return None
     if st and st.get("pending_record"):
