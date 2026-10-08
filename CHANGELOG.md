@@ -3,6 +3,30 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.7 — 2026-10-08
+
+Universe dinamis untuk perbandingan; buku utama TIDAK berubah (`universe.mode: static`).
+`compare_rolling` dinyalakan 2026-10-08 (keputusan user); buku pembanding mulai
+2026-10-09 07:02 WIB.
+- Alasan: universe static (top 150 HYPE per Sep 2026) tidak pernah memasukkan koin
+  baru, dan itu sumber bias yang tercatat di HANDOVER §7. Buku pembanding mengukur
+  efeknya di forward test, tanpa mengubah buku utama.
+- Mode `rolling_monthly`: kandidat = perp HYPE belum delist tanpa exclude, urut qv30.
+  Non-anggota masuk kalau peringkat volume <= 150 (`top_n`), anggota tetap selama
+  <= 200 (`exit_rank`). Refresh sekali per bulan kalender UTC (siklus harian pertama),
+  state di `state/universe_rolling.json`. Anggota awal = daftar riset. Universe bisa
+  sampai 200 koin. Nilai 150/200/bulanan = usulan, BELUM diuji.
+- `universe.compare_rolling: true` menyalakan buku paper kedua
+  (`momentum_paper_rolling.json`, log `equity_rolling.csv` + `orders_rolling.csv`),
+  aturan momentum sama persis. Hanya paper; tidak ikut aturan berhenti, alarm,
+  Sheets, atau live. `universe.mode: rolling_monthly` untuk buku utama ditolak.
+- Buku pembanding BARU hanya dibuat di siklus trading harian buku utama (±07:02 WIB),
+  supaya flag yang dinyalakan siang hari tidak masuk di harga siang.
+- Diverifikasi (40 hari `run_momentum` paper, rezim ON/OFF, lewat pergantian bulan):
+  dengan `compare_rolling: false` state + pesan identik byte demi byte dengan
+  rmf-0.1.6; dengan `true`, semua file buku utama tetap identik, pesan harian
+  bertambah baris pembanding.
+
 ## rmf-0.1.6 — 2026-10-05
 
 Koreksi F5 (audit 2026-10-05) berdasarkan canary di akun RMF; strategi tidak berubah.

@@ -17,5 +17,8 @@ manual saat watcher jalan.
 | `flush_paper.json` | posisi flush paper terbuka + bar terakhir yang diproses |
 | `outbox.json` | pesan Telegram yang belum terkirim |
 | `alerts.json`, `watchdog.json` | penanda supaya alarm tidak dikirim berulang |
+| `momentum_paper_rolling.json`, `momentum_view_rolling.json` | buku paper pembanding universe bulanan (hanya kalau `universe.compare_rolling: true`) |
+| `universe_rolling.json` | anggota universe bulanan (urut volume), tanggal refresh terakhir, log `[tanggal, masuk, keluar]` |
+| `equity_rolling.csv`, `orders_rolling.csv` | ekuitas + basket dan order buku pembanding (tidak dicerminkan ke Sheets) |
 
 CSV memakai `merge=union` (`.gitattributes`), jadi run yang menulis bersamaan tidak bentrok.

@@ -33,8 +33,14 @@ COLUMNS = {
     "flush_trades": ["entry_time", "exit_time", "coin", "signal_bar", "entry_px", "exit_px", "stop",
                      "target", "qty", "notional", "risk_usd", "forced_min", "bars_held", "reason",
                      "pnl_gross", "fees", "funding", "pnl_net", "r_multiple"],
+    # buku paper pembanding universe bulanan (universe.compare_rolling)
+    "equity_rolling": ["exec_day", "time_utc", "regime_on", "paper_equity", "paper_gross", "paper_positions",
+                       "universe_size", "bench_ret", "bench_index", "paper_peak", "paper_dd_pct", "static_equity"],
+    "orders_rolling": ["time_utc", "book", "strategy", "exec_day", "coin", "side", "qty", "px", "mid",
+                       "notional", "fee", "pnl", "reason", "status"],
 }
-# Log yang dicerminkan ke Sheets (runs tidak: terlalu sering).
+# Log yang dicerminkan ke Sheets (runs tidak: terlalu sering; *_rolling tidak:
+# buku pembanding tidak boleh mengubah Sheets buku utama).
 MIRROR = {"orders", "equity", "flush_trades", "flush_signals"}
 
 

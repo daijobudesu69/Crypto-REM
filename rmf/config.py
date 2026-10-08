@@ -23,6 +23,8 @@ class Universe:
     exclude: tuple = ("USDC", "USDT", "USDE", "USDH", "FDUSD", "DAI", "PYUSD", "USD1", "PAXG", "XAUT")
     fetch_days: int = 100
     btc_fetch_days: int = 1200
+    exit_rank: int = 200             # rolling_monthly: anggota lama tetap selama peringkat volume <= ini
+    compare_rolling: bool = False    # buku paper kedua dengan universe rolling_monthly
 
 
 @dataclass(frozen=True)
@@ -174,7 +176,11 @@ def validate(cfg: Config) -> None:
     if cfg.universe.fetch_days < m.min_history_days + 2:
         raise ValueError("universe.fetch_days harus > min_history_days")
     if cfg.universe.mode not in ("static", "rolling"):
-        raise ValueError("universe.mode: static atau rolling")
+        # rolling_monthly hanya untuk buku paper pembanding (compare_rolling), bukan
+        # buku utama: view buku utama juga dipakai live.
+        raise ValueError("universe.mode: static atau rolling (rolling_monthly hanya lewat compare_rolling)")
+    if cfg.universe.exit_rank < cfg.universe.top_n:
+        raise ValueError("universe.exit_rank harus >= top_n")
     if f.signal_source not in ("binance_spot", "binance_futures"):
         raise ValueError("flush.signal_source: binance_spot atau binance_futures")
     if cfg.execution.margin_mode not in ("cross", "isolated"):

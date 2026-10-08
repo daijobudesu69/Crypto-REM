@@ -85,16 +85,21 @@ def static_universe(cfg) -> list:
         return [x.strip() for x in fh if x.strip() and not x.startswith("#")]
 
 
-def select_universe(candles: dict, meta: dict, cfg) -> list:
+def select_universe(candles: dict, meta: dict, cfg, members: list | None = None) -> list:
     """Koin universe yang masih hidup, urut volume (urutan ini memecah seri peringkat).
 
     static : daftar riset (config/hype_universe.txt), dikurangi yang delist / tanpa data.
     rolling: top-N perp belum delist, tanpa stablecoin, urut volume 30 hari.
+    rolling_monthly: anggota dari state/universe_rolling.json (lihat rolling_update),
+             dikurangi yang delist / exclude / tanpa data.
     """
     u = cfg.universe
     if u.mode == "static":
         return [c for c in static_universe(cfg)
                 if c in candles and c in meta and not meta[c].get("isDelisted")]
+    if u.mode == "rolling_monthly":
+        return [c for c in members or []
+                if c in candles and c in meta and not meta[c].get("isDelisted") and c not in u.exclude]
     rows = []
     for coin, df in candles.items():
         m = meta.get(coin, {})
@@ -103,6 +108,47 @@ def select_universe(candles: dict, meta: dict, cfg) -> list:
         rows.append((coin, qv30(df, u.volume_days)))
     rows.sort(key=lambda x: -x[1])
     return [c for c, _ in rows[: u.top_n]]
+
+
+def volume_ranked(candles: dict, meta: dict, cfg) -> list:
+    """Kandidat universe bulanan: perp belum delist, tanpa exclude, ada candle,
+    urut qv30 tertinggi (indeks 0 = peringkat volume 1)."""
+    u = cfg.universe
+    rows = []
+    for coin, df in candles.items():
+        if coin not in meta or meta[coin].get("isDelisted") or coin in u.exclude or df is None or df.empty:
+            continue
+        rows.append((coin, qv30(df, u.volume_days)))
+    rows.sort(key=lambda x: -x[1])
+    return [c for c, _ in rows]
+
+
+def refresh_members(members: list, ranked: list, top_n: int, exit_rank: int) -> tuple[list, list, list]:
+    """Zona penyangga: non-anggota masuk kalau peringkat volume <= top_n, anggota
+    tetap selama <= exit_rank. Return (anggota urut volume, masuk, keluar)."""
+    old = set(members)
+    new = [c for i, c in enumerate(ranked) if i + 1 <= (exit_rank if c in old else top_n)]
+    keep = set(new)
+    return new, [c for c in new if c not in old], [c for c in members if c not in keep]
+
+
+def rolling_update(state: dict, closed: dict, meta: dict, exec_day, cfg) -> tuple[dict, list | None]:
+    """Refresh universe bulanan, sekali per bulan kalender UTC (siklus harian pertama).
+
+    state = {"members", "last_refresh", "log": [[tanggal, masuk, keluar]]}; closed =
+    candle yang sudah close. Di bulan yang sudah di-refresh state tidak disentuh
+    (idempoten). Return (state, entri log baru atau None).
+    """
+    day = naive_day(exec_day)
+    last = state.get("last_refresh")
+    if last and str(last)[:7] >= str(day.date())[:7]:
+        return state, None
+    u = cfg.universe
+    members, ins, outs = refresh_members(list(state.get("members") or []), volume_ranked(closed, meta, cfg),
+                                         u.top_n, u.exit_rank)
+    entry = [str(day.date()), ins, outs]
+    return {**state, "members": members, "last_refresh": str(day.date()),
+            "log": list(state.get("log") or []) + [entry]}, entry
 
 
 def closed_only(candles: dict, last_day: pd.Timestamp) -> dict:
@@ -195,9 +241,11 @@ def bench_return(members: dict, funding: dict | None = None) -> float:
     return float(np.mean(r)) if r else 0.0
 
 
-def market_view(candles: dict, meta: dict, exec_day, cfg, funding: dict | None = None) -> View:
+def market_view(candles: dict, meta: dict, exec_day, cfg, funding: dict | None = None,
+                members: list | None = None) -> View:
     """candles boleh memuat candle hari ini yang belum close (dipakai hanya untuk
-    open basket); peringkat dan rezim hanya memakai candle sampai exec_day - 1."""
+    open basket); peringkat dan rezim hanya memakai candle sampai exec_day - 1.
+    members = anggota universe untuk mode rolling_monthly."""
     m = cfg.momentum
     exec_day = naive_day(exec_day)
     last_day = exec_day - pd.Timedelta(days=1)
@@ -205,7 +253,7 @@ def market_view(candles: dict, meta: dict, exec_day, cfg, funding: dict | None =
         raise ValueError(f"candle {m.regime_symbol} tidak ada")
     closed = closed_only(candles, last_day)
     on, btc_c, btc_e = regime(closed[m.regime_symbol], last_day, m.regime_ema)
-    universe = select_universe(closed, meta, cfg)
+    universe = select_universe(closed, meta, cfg, members)
     panel = close_panel(closed, universe, last_day)
     ranking = rank_coins(panel, m.lookback_days, m.min_history_days)
     members = bench_members(candles, universe, exec_day, m.min_history_days)
