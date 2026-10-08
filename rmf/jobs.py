@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import pandas as pd
 
@@ -45,6 +45,7 @@ class Ctx:
     trader_factory: object = None      # () -> trader; None = live tidak tersedia
     _meta: dict | None = None
     log: list = field(default_factory=list)
+    _c1d: dict = field(default_factory=dict)     # candle 1d siklus ini, dipakai ulang buku pembanding
 
     def meta(self) -> dict:
         if self._meta is None:
@@ -70,19 +71,32 @@ def started(cfg, now: dt.datetime) -> bool:
 def fetch_view(ctx: Ctx, exec_day: pd.Timestamp) -> mom.View:
     cfg = ctx.cfg
     meta = ctx.meta()
-    now_ms = int(ctx.now.timestamp() * 1000)
     alive = [c for c, m in meta.items() if not m["isDelisted"]]
     if cfg.universe.mode == "static":
         want = set(mom.static_universe(cfg)) | {cfg.momentum.regime_symbol}
         coins = [c for c in alive if c in want]
     else:
         coins = [c for c in alive if c not in cfg.universe.exclude]
+    candles = _fetch_1d(ctx, coins)
+    # Funding basket TIDAK diambil di sini: basket hanya dipakai aturan berhenti,
+    # jadi diambil setelah order dan pesan terkirim (_finish_bench).
+    return mom.market_view(candles, meta, exec_day, cfg, None)
+
+
+def _fetch_1d(ctx: Ctx, coins: list, alarm: bool = True) -> dict:
+    """Candle 1d per koin. Gagal sebagian -> DataIncomplete sampai FETCH_RETRY_UNTIL_H,
+    setelah itu jalan tanpa koin itu (+ alarm Telegram kalau alarm=True)."""
+    cfg = ctx.cfg
+    now_ms = int(ctx.now.timestamp() * 1000)
     candles, failed = {}, []
     for c in coins:
+        if c in ctx._c1d:
+            candles[c] = ctx._c1d[c]
+            continue
         days = cfg.universe.btc_fetch_days if c == cfg.momentum.regime_symbol else cfg.universe.fetch_days
         try:
             # include_open: open candle hari ini dipakai basket (open E-1 -> open E)
-            candles[c] = ctx.info.candles(c, "1d", now_ms - days * DAY_MS, include_open=True)
+            candles[c] = ctx._c1d[c] = ctx.info.candles(c, "1d", now_ms - days * DAY_MS, include_open=True)
         except Exception as e:  # noqa: BLE001
             if c == cfg.momentum.regime_symbol:
                 raise
@@ -94,16 +108,15 @@ def fetch_view(ctx: Ctx, exec_day: pd.Timestamp) -> mom.View:
             raise DataIncomplete(f"candle 1d gagal diambil untuk {len(failed)} koin ({names}); "
                                  f"dicoba ulang sampai {FETCH_RETRY_UNTIL_H:02d}:00 UTC")
         ctx.say(f"[momentum] candle gagal diambil: {names}")
-        ctx.outbox.add(f"🚨 <b>RMF — data candle tidak lengkap</b>\n"
-                       f"Masih gagal setelah {FETCH_RETRY_UNTIL_H:02d}:00 UTC: {notify.esc(names)}\n"
-                       "Siklus tetap jalan: koin itu dianggap tidak eligible (posisinya dijual). "
-                       "Cek manual.")
-    # Funding basket TIDAK diambil di sini: basket hanya dipakai aturan berhenti,
-    # jadi diambil setelah order dan pesan terkirim (_finish_bench).
-    return mom.market_view(candles, meta, exec_day, cfg, None)
+        if alarm:
+            ctx.outbox.add(f"🚨 <b>RMF — data candle tidak lengkap</b>\n"
+                           f"Masih gagal setelah {FETCH_RETRY_UNTIL_H:02d}:00 UTC: {notify.esc(names)}\n"
+                           "Siklus tetap jalan: koin itu dianggap tidak eligible (posisinya dijual). "
+                           "Cek manual.")
+    return candles
 
 
-def _finish_bench(ctx: Ctx, view: mom.View) -> None:
+def _finish_bench(ctx: Ctx, view: mom.View, view_file: str = "momentum_view.json") -> None:
     """Kurangi funding riil dari return basket (definisi riset xsec_hl.py)."""
     if view.bench_net or not ctx.cfg.benchmark.include_funding or not view.bench_coins:
         view.bench_net = True
@@ -121,7 +134,7 @@ def _finish_bench(ctx: Ctx, view: mom.View) -> None:
         ctx.say(f"[momentum] funding basket gagal untuk {miss} koin (dianggap 0)")
     view.bench_ret = view.bench_gross - total / len(view.bench_coins)
     view.bench_net = True
-    store.save_json("momentum_view.json", view.to_dict())
+    store.save_json(view_file, view.to_dict())
 
 
 def _accrue_funding(ctx: Ctx, book: dict, mids: dict) -> float:
@@ -167,7 +180,14 @@ def momentum_due(ctx: Ctx) -> tuple[bool, bool, str]:
 
 def run_momentum(ctx: Ctx) -> dict | None:
     need_paper, need_live, exec_day = momentum_due(ctx)
+    need_roll = rolling_due(ctx, exec_day)
     if not (need_paper or need_live):
+        if need_roll:                       # buku utama sudah selesai hari ini
+            mids = ctx.info.all_mids()
+            main = (store.load_json("momentum_paper.json") or {}).get("book")
+            _rolling_safe(ctx, _rolling_trade, exec_day, mids, ctx.now.isoformat(timespec="seconds"),
+                          bk.equity(main, mids) if main else None)
+            _rolling_safe(ctx, _rolling_finish)
         return None
     cfg = ctx.cfg
     _finish_stale_record(ctx, exec_day)
@@ -191,6 +211,11 @@ def run_momentum(ctx: Ctx) -> dict | None:
                                    "delay_min": round(delay, 1)}
     if need_live:
         out["live"] = _live_day(ctx, view, exec_day, t)
+    if need_roll:                           # setelah live: buku pembanding tidak menunda order live
+        if trade_paper:                     # buku utama tersimpan dulu sebelum fetch tambahan
+            store.save_json("momentum_paper.json", paper)
+        static_eq = out["paper"]["equity_before"] if out["paper"] else bk.equity(paper["book"], mids)
+        out["rolling"] = _rolling_safe(ctx, _rolling_trade, exec_day, mids, t, static_eq)
 
     if trade_paper:
         # Urutan sengaja: order tercatat -> pesan dikirim SEKARANG -> baru funding
@@ -206,6 +231,8 @@ def run_momentum(ctx: Ctx) -> dict | None:
             vrec = mom.View.from_dict(store.load_json("momentum_view.json"))
         out["stop"] = _record_day(ctx, paper, vrec, mids, out)
         store.save_json("momentum_paper.json", paper)
+    if need_roll:
+        _rolling_safe(ctx, _rolling_finish)
     return out
 
 
@@ -227,7 +254,8 @@ def _finish_stale_record(ctx: Ctx, exec_day: str) -> None:
     store.save_json("momentum_paper.json", paper)
 
 
-def _paper_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, t: str) -> dict:
+def _paper_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, t: str,
+               orders_log: str = "orders", book_name: str = "paper") -> dict:
     cfg = ctx.cfg
     b = paper["book"]
     funding = _accrue_funding(ctx, b, mids)
@@ -252,7 +280,7 @@ def _paper_day(ctx: Ctx, paper: dict, view: mom.View, mids: dict, t: str) -> dic
         f.update(reason=f"peringkat {view.ranks().get(coin)}")
         fills.append(f)
     for f in fills:
-        store.append("orders", {"time_utc": t, "book": "paper", "strategy": "momentum", "exec_day": view.exec_day,
+        store.append(orders_log, {"time_utc": t, "book": book_name, "strategy": "momentum", "exec_day": view.exec_day,
                                 "coin": f["coin"], "side": f["side"], "qty": f["qty"], "px": f["px"],
                                 "mid": mids.get(f["coin"]), "notional": f["notional"], "fee": f["fee"],
                                 "pnl": f.get("net_pnl", 0.0), "reason": f["reason"], "status": "paper"})
@@ -392,6 +420,132 @@ def _stop_rules(ctx: Ctx, paper: dict) -> dict:
     return res
 
 
+# --------------------------------------------------------------------------- #
+#  Buku paper pembanding: universe rolling_monthly (universe.compare_rolling)
+#  Hanya paper. Tidak ikut aturan berhenti, alarm Telegram, Sheets, atau live.
+#  Gagal apa pun hanya dicatat di log; dicoba lagi siklus berikutnya.
+# --------------------------------------------------------------------------- #
+ROLL_PAPER = "momentum_paper_rolling.json"
+ROLL_VIEW = "momentum_view_rolling.json"
+ROLL_UNIVERSE = "universe_rolling.json"
+ROLL_NAMES_MAX = 20          # nama koin masuk/keluar di pesan harian
+
+
+def rolling_due(ctx: Ctx, exec_day: str) -> bool:
+    cfg, now = ctx.cfg, ctx.now
+    if not cfg.universe.compare_rolling or ctx.ctrl.momentum == "off" or not started(cfg, now):
+        return False
+    day = utc_day(now)
+    if pd.Timestamp(now).tz_convert("UTC").tz_localize(None) < day + pd.Timedelta(minutes=cfg.momentum.run_after_minutes):
+        return False
+    st = store.load_json(ROLL_PAPER) or {}
+    return st.get("last_day") != exec_day or bool(st.get("pending_record"))
+
+
+def _rolling_safe(ctx: Ctx, fn, *args):
+    try:
+        return fn(ctx, *args)
+    except Exception as e:  # noqa: BLE001
+        if not isinstance(e, DataIncomplete):
+            traceback.print_exc()
+        ctx.say(f"[rolling] {fn.__name__} gagal ({type(e).__name__}: {str(e)[:200]}); dicoba siklus berikutnya")
+        return None
+
+
+def _rolling_view(ctx: Ctx, exec_day: str) -> mom.View:
+    """View dengan universe bulanan. Refresh keanggotaan (sekali per bulan) di sini."""
+    cfg = ctx.cfg
+    vdoc = store.load_json(ROLL_VIEW)
+    if vdoc and vdoc.get("exec_day") == exec_day:
+        return mom.View.from_dict(vdoc)
+    meta = ctx.meta()
+    coins = [c for c, m in meta.items() if not m["isDelisted"] and c not in cfg.universe.exclude]
+    if cfg.momentum.regime_symbol not in coins:
+        coins.append(cfg.momentum.regime_symbol)
+    candles = _fetch_1d(ctx, coins, alarm=False)
+    day = pd.Timestamp(exec_day)
+    # Belum ada state: mulai dari daftar riset, lalu refresh pertama langsung jalan.
+    uni = store.load_json(ROLL_UNIVERSE) or {"members": mom.static_universe(cfg), "last_refresh": None, "log": []}
+    uni, entry = mom.rolling_update(uni, mom.closed_only(candles, day - pd.Timedelta(days=1)), meta, day, cfg)
+    if entry is not None:
+        store.save_json(ROLL_UNIVERSE, uni)
+        ctx.say(f"[rolling] universe diperbarui: masuk {len(entry[1])}, keluar {len(entry[2])}, "
+                f"{len(uni['members'])} anggota")
+    rcfg = replace(cfg, universe=replace(cfg.universe, mode="rolling_monthly"))
+    view = mom.market_view(candles, meta, day, rcfg, None, members=uni["members"])
+    store.save_json(ROLL_VIEW, view.to_dict())
+    return view
+
+
+def _rolling_trade(ctx: Ctx, exec_day: str, mids: dict, t: str, static_eq: float | None) -> dict | None:
+    """Satu hari buku pembanding: aturan momentum sama persis, universe bulanan."""
+    cfg = ctx.cfg
+    st = store.load_json(ROLL_PAPER)
+    if st and st.get("last_day") == exec_day:
+        return None
+    if st and st.get("pending_record"):
+        _rolling_finish(ctx)
+        st = store.load_json(ROLL_PAPER)
+    st = st or {"book": bk.new_book(cfg.capital_usdc), "bench_index": 1.0,
+                "start_day": exec_day, "static_start_equity": static_eq}
+    view = _rolling_view(ctx, exec_day)
+    res = _paper_day(ctx, st, view, mids, t, orders_log="orders_rolling", book_name="paper_rolling")
+    st["pending_record"] = {"exec_day": exec_day, "time_utc": t, "equity": res["equity"], "gross": res["gross"],
+                            "positions": len(res["positions"]), "static_equity": static_eq}
+    store.save_json(ROLL_PAPER, st)
+    uni = store.load_json(ROLL_UNIVERSE) or {}
+    log = uni.get("log") or []
+    res.update(universe_size=view.universe_size, start_day=st["start_day"],
+               start_capital=st["book"]["start_capital"], static_start_equity=st.get("static_start_equity"),
+               refresh=log[-1] if log and uni.get("last_refresh") == exec_day else None)
+    return res
+
+
+def _rolling_finish(ctx: Ctx) -> None:
+    """Setelah pesan: funding basket + baris equity_rolling.csv (tanpa aturan berhenti)."""
+    st = store.load_json(ROLL_PAPER) or {}
+    rec = st.get("pending_record")
+    if not rec:
+        return
+    vdoc = store.load_json(ROLL_VIEW)
+    if not vdoc or vdoc.get("exec_day") != rec["exec_day"]:
+        ctx.say(f"[rolling] catatan {rec['exec_day']} tidak bisa diselesaikan (view hilang); dibuang")
+        st.pop("pending_record", None)
+        store.save_json(ROLL_PAPER, st)
+        return
+    view = mom.View.from_dict(vdoc)
+    _finish_bench(ctx, view, ROLL_VIEW)
+    if st.get("bench_day") != view.exec_day:
+        st["bench_index"] = float(st.get("bench_index", 1.0)) * (1 + view.bench_ret)
+        st["bench_day"] = view.exec_day
+    peak = float(st["book"].get("peak_equity", rec["equity"]))
+    store.append("equity_rolling", {
+        "exec_day": view.exec_day, "time_utc": rec["time_utc"], "regime_on": view.regime_on,
+        "paper_equity": rec["equity"], "paper_gross": rec["gross"], "paper_positions": rec["positions"],
+        "universe_size": view.universe_size, "bench_ret": view.bench_ret, "bench_index": st["bench_index"],
+        "paper_peak": peak, "paper_dd_pct": (rec["equity"] / peak - 1) * 100 if peak else 0.0,
+        "static_equity": rec.get("static_equity")}, mirror=False)
+    st.pop("pending_record", None)
+    store.save_json(ROLL_PAPER, st)
+
+
+def _rolling_lines(rl: dict, static_eq: float) -> list:
+    ret = (rl["equity"] / rl["start_capital"] - 1) * 100
+    s = f"  pembanding universe bulanan (paper): {notify.usd(rl['equity'])} USDC ({ret:+.2f}%"
+    if rl.get("static_start_equity"):
+        s += f" vs static {(static_eq / rl['static_start_equity'] - 1) * 100:+.2f}%"
+    lines = [s + f" sejak {rl['start_day']}) · {len(rl['positions'])} posisi"]
+    if rl.get("refresh"):
+        _, ins, outs = rl["refresh"]
+
+        def names(xs):
+            more = f" +{len(xs) - ROLL_NAMES_MAX} lagi" if len(xs) > ROLL_NAMES_MAX else ""
+            return notify.esc(", ".join(xs[:ROLL_NAMES_MAX]) + more) if xs else "-"
+        lines.append(f"  universe bulanan diperbarui: masuk {len(ins)} ({names(ins)}) · "
+                     f"keluar {len(outs)} ({names(outs)}) · {rl['universe_size']} koin")
+    return lines
+
+
 def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) -> str:
     """Ringkasan harian, tata letak mengikuti heartbeat Crypto-MEX (sementara,
     format final RMF dibahas nanti)."""
@@ -442,6 +596,8 @@ def daily_message(ctx: Ctx, view: mom.View, out: dict, paper: dict, mids: dict) 
     if paper.get("months_behind"):
         lines.append(f"  kalah dari basket {paper['months_behind']} bulan berturut-turut "
                      f"(batas {cfg.stop_rules.underperform_months})")
+    if out.get("rolling"):
+        lines += _rolling_lines(out["rolling"], p["equity"])
     if out["live"] is not None:
         lines += ["", _live_message(out["live"], ctx, short=True)]
     else:

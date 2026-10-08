@@ -3,6 +3,25 @@
 Setiap perubahan parameter strategi di `config.yaml` dicatat di sini dengan tanggal
 dan alasan. Tanpa catatan, forward test tidak bisa dibandingkan dengan simulasi.
 
+## rmf-0.1.7 — 2026-10-08
+
+Opsi universe dinamis untuk perbandingan; perilaku default TIDAK berubah
+(`universe.mode: static`, `compare_rolling: false`).
+- Alasan: universe static (top 150 HYPE per Sep 2026) tidak pernah memasukkan koin
+  baru, dan itu sumber bias yang tercatat di HANDOVER §7. Buku pembanding mengukur
+  efeknya di forward test, tanpa mengubah buku utama.
+- Mode `rolling_monthly`: kandidat = perp HYPE belum delist tanpa exclude, urut qv30.
+  Non-anggota masuk kalau peringkat volume <= 150 (`top_n`), anggota tetap selama
+  <= 200 (`exit_rank`). Refresh sekali per bulan kalender UTC (siklus harian pertama),
+  state di `state/universe_rolling.json`. Anggota awal = daftar riset. Universe bisa
+  sampai 200 koin. Nilai 150/200/bulanan = usulan, BELUM diuji.
+- `universe.compare_rolling: true` menyalakan buku paper kedua
+  (`momentum_paper_rolling.json`, log `equity_rolling.csv` + `orders_rolling.csv`),
+  aturan momentum sama persis. Hanya paper; tidak ikut aturan berhenti, alarm,
+  Sheets, atau live. `universe.mode: rolling_monthly` untuk buku utama ditolak.
+- Diverifikasi: dengan config default, state + pesan 40 hari `run_momentum` paper
+  (rezim ON/OFF, lewat pergantian bulan) identik byte demi byte dengan rmf-0.1.6.
+
 ## rmf-0.1.6 — 2026-10-05
 
 Koreksi F5 (audit 2026-10-05) berdasarkan canary di akun RMF; strategi tidak berubah.

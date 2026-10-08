@@ -15,6 +15,10 @@ Forward test di **HYPE (Hyperliquid)**, modal **200 USDC**:
   dari basket "beli semua koin" 1×, atau return 6 bulan < −12,5% (persentil 5
   simulasi HYPE). Bot menandai dan mengirim alarm; keputusan di tangan user.
 - Universe = daftar riset (top 150 HYPE per Sep 2026). Forward test mulai 2026-10-05.
+- Opsional (mati secara default): buku paper **pembanding** dengan universe bulanan
+  (`rolling_monthly`: masuk top 150 volume, keluar > 200, refresh tiap awal bulan UTC).
+  Nyalakan dengan `universe.compare_rolling: true` di `config.yaml`. Hanya paper, tidak
+  menyentuh buku utama, aturan berhenti, alarm, Sheets, atau live. Parameter belum diuji.
 
 > [!WARNING]
 > Ekspektasi momentum di HYPE (simulasi Jul 2024 → Okt 2026): 200 → ±314 USDC, CAGR

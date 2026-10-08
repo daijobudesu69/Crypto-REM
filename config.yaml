@@ -27,6 +27,27 @@ universe:
   fetch_days: 100             # riwayat candle 1d per koin (>= min_history_days)
   btc_fetch_days: 1200        # EMA50 BTC dihitung dari riwayat panjang, seperti riset
 
+  # ── rolling_monthly: universe bulanan, HANYA untuk buku paper pembanding ──
+  # Nilai 150 / 200 / bulanan adalah USULAN yang BELUM diuji (tanpa backtest).
+  # Tidak dipakai buku utama maupun live (universe.mode di atas tetap static).
+  #   kandidat : perp HYPE belum delist, tanpa exclude, diurutkan qv30 (volume
+  #              notional volume_days hari, rumus sama dengan daftar riset)
+  #   top_n    : non-anggota MASUK kalau peringkat volume <= top_n (150)
+  #   exit_rank: anggota lama TETAP selama peringkat <= exit_rank (200), keluar
+  #              kalau > 200. Zona 151-200 = penyangga, jadi universe bisa > 150
+  #              (maks 200 koin)
+  #   bulanan  : dihitung ulang sekali per bulan kalender UTC, di siklus harian
+  #              pertama bulan itu; di luar itu anggota dibaca dari
+  #              state/universe_rolling.json. Anggota awal = daftar riset.
+  #   Syarat >= 60 candle untuk ikut peringkat momentum tetap berlaku.
+  exit_rank: 200
+  # true = buku paper kedua (state/momentum_paper_rolling.json) berjalan paralel
+  # dengan aturan momentum yang sama, universe rolling_monthly. Tidak ikut aturan
+  # berhenti, alarm, Sheets, atau live. Pesan harian dapat 1 baris pembanding
+  # (+ 1 baris saat universe diperbarui). Butuh candle 1d SEMUA perp (bukan hanya
+  # daftar riset), jadi siklus harian lebih lama.
+  compare_rolling: false
+
 momentum:
   n_hold: 10                  # isi sampai 10 posisi (peringkat 1-10)
   exit_rank: 15               # jual kalau peringkat > 15
