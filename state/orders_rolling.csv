@@ -1,0 +1,11 @@
+time_utc,book,strategy,exec_day,coin,side,qty,px,mid,notional,fee,pnl,reason,status
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,SAND,BUY,152.0,0.06648262,0.066466,10.10535771,0.00454741,0.0,peringkat 1,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,PUMP,BUY,1815.0,0.00554139,0.00554,10.05761378,0.00452593,0.0,peringkat 2,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,STRK,BUY,180.4,0.05574393,0.05573,10.05620542,0.00452529,0.0,peringkat 3,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,GRASS,BUY,16.6,0.60761187,0.60746,10.08635696,0.00453886,0.0,peringkat 4,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,ZRO,BUY,5.2,1.97079258,1.9703,10.24812139,0.00461165,0.0,peringkat 5,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,MET,BUY,23.0,0.43828454,0.438175,10.08054451,0.00453625,0.0,peringkat 6,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,W,BUY,663.4,0.01515379,0.01515,10.05302263,0.00452386,0.0,peringkat 7,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,SUPER,BUY,46.0,0.22333082,0.223275,10.27321766,0.00462295,0.0,peringkat 8,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,STX,BUY,26.4,0.38095522,0.38086,10.05721768,0.00452575,0.0,peringkat 9,paper
+2026-10-09T00:02:10+00:00,paper_rolling,momentum,2026-10-09,IMX,BUY,54.9,0.18335583,0.18331,10.06623493,0.00452981,0.0,peringkat 10,paper
