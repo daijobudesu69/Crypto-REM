@@ -10,3 +10,5 @@ research/results/*.parquet
 .rmf_control_origin.yaml
 .rmf_control_origin.yaml.tmp
 state/.tmp_*
+# setelan lokal aplikasi Claude (izin, worktree sementara)
+.claude/
