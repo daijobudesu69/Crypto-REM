@@ -92,7 +92,27 @@ User menempelkan kritik 15 poin: 11 benar, 3 sebagian, 1 salah. Yang mengubah ke
 - **B3:** tanpa pemasukan funding, CAGR backtest 90% → 82%.
 - **B7:** seed acak tidak berpengaruh (20 seed, DD −32 s/d −34%).
 - **B5 salah:** backtest juga memakai syarat ≥60 hari.
-- **Belum diuji:** eksekusi telat, SL harga untuk momentum, koin delisted, filter likuiditas.
+- **Belum diuji:** eksekusi telat, koin delisted, filter likuiditas. (SL harga momentum sudah diuji 2026-10-07, lihat di bawah.)
+
+### SL harga untuk momentum (diuji 2026-10-07, DITOLAK)
+
+Skrip `research/stop_test.py`, hasil di `research/results/stop_test.json`. Aturan sama dengan `buffer_test.py`, ditambah stop dari harga entry yang dicek terhadap **low harian**. Fill di harga stop (atau open kalau gap di bawahnya), slippage tambahan 0,2%. Momentum saja 0,5×, modal 200 USDC. Tanpa SL hasilnya cocok dengan `buffer_test.run` (selisih hanya di 4 dari 2.464 hari, dari funding).
+
+| Binance, Jan 2022 → Okt 2026 | 200 USDC → | CAGR | Max DD | Kena SL |
+|---|---|---|---|---|
+| **Tanpa SL** | **681** | **29,5%** | −40,8% | 0 |
+| SL −10% | 263 | 6,0% | −40,0% | 812× |
+| SL −15% | 394 | 15,4% | −40,0% | 362× |
+| SL −20% | 419 | 16,9% | −40,7% | 191× |
+| SL −25% | 501 | 21,3% | −40,5% | 103× |
+
+- **Max DD tidak turun.** DD datang dari pasar yang turun bersamaan (2022), bukan dari satu koin. Pengamannya adalah filter BTC, bukan SL.
+- **SL memotong koin yang sempat koreksi lalu pulih.** Dari 1.433 posisi tanpa SL, 37% sempat −10% atau lebih, tetapi rata-rata ditutup di −5,5% oleh aturan peringkat. Hanya 13 posisi (1%) yang sempat −50% (terburuk −62%).
+- **HYPE (Jul 2024 → Okt 2026):**
+  - Tanpa SL: 200 → 307 (CAGR 21%, DD −35%).
+  - Dengan beli ulang langsung (perilaku bot): semua level SL lebih buruk.
+  - Satu varian lebih bagus, yaitu SL −15% dengan koin diblokir sampai peringkatnya > 15: 200 → 407. Tetapi varian yang sama di Binance turun ke 375 (vs 681 tanpa SL), jadi dianggap kebetulan.
+- **Kesimpulan:** momentum tetap **tanpa SL harga**. Jangan diusulkan lagi tanpa bukti baru.
 
 ## 5. Infrastruktur & batasan jaringan user
 
@@ -135,6 +155,7 @@ research/
   finalists.py             <- t harian, baseline acak, portofolio, cek HYPE
   xsec.py / xsec_detail.py / xsec_hl.py   <- momentum lintas koin (grid, detail, HYPE)
   buffer_test.py           <- momentum N koin + buffer exit (FINAL: N=10, exit >15)
+  stop_test.py             <- buffer_test + SL harga dari entry (−10..−25%), Binance & HYPE -> ditolak (§4)
   breadth.py               <- basket ≥N koin + breadth thrust
   strategy_sim.py          <- simulasi akun 300 USD (Binance) -> sim_variants.pkl
   small_capital.py         <- simulasi dengan minimum order (floor), tolak risiko, gross cap, seed, funding stress
